@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
   ros::Rate slow_loop(10);
   std::vector<std::pair<Eigen::Vector3d, Eigen::Matrix3d>> poses_vec;
   std::vector<double> times_vec;
-  load_pose_with_time(pose_path, poses_vec, times_vec);
+  load_pose_with_time(pose_path, poses_vec, times_vec);//! 读取时间戳和位姿到vector
   std::cout << "Sucessfully load pose with number: " << poses_vec.size()
             << std::endl;
 
@@ -86,7 +86,7 @@ int main(int argc, char **argv) {
   rosbag::View view(bag, rosbag::TypeQuery(types));
 
   while (ros::ok()) {
-    BOOST_FOREACH (rosbag::MessageInstance const m, view) {
+    BOOST_FOREACH (rosbag::MessageInstance const m, view) {//! view里的每个m
       sensor_msgs::PointCloud2::ConstPtr cloud_ptr =
           m.instantiate<sensor_msgs::PointCloud2>();
       if (cloud_ptr != NULL) {
@@ -95,17 +95,17 @@ int main(int argc, char **argv) {
         pcl_conversions::toPCL(*cloud_ptr, pcl_pc);
         pcl::PointCloud<pcl::PointXYZI> cloud;
         pcl::fromPCLPointCloud2(pcl_pc, cloud);
-        int pose_index = findPoseIndexUsingTime(times_vec, laser_time);
+        int pose_index = findPoseIndexUsingTime(times_vec, laser_time);//! 找时间戳最接近的，误差在0.5s以内就可以
         Eigen::Vector3d translation = poses_vec[pose_index].first;
         Eigen::Matrix3d rotation = poses_vec[pose_index].second;
         for (size_t i = 0; i < cloud.size(); i++) {
           Eigen::Vector3d pv = point2vec(cloud.points[i]);
           pv = rotation * pv + translation;
           cloud.points[i] = vec2point(pv);
-        }
+        }//! 点云转到全局坐标下
         down_sampling_voxel(cloud, config_setting.ds_size_);
         for (auto pv : cloud.points) {
-          temp_cloud->points.push_back(pv);
+          temp_cloud->points.push_back(pv);//! subumap
         }
 
         // check if keyframe
@@ -115,7 +115,7 @@ int main(int argc, char **argv) {
           // step1. Descriptor Extraction
           auto t_descriptor_begin = std::chrono::high_resolution_clock::now();
           std::vector<STDesc> stds_vec;
-          std_manager->GenerateSTDescs(temp_cloud, stds_vec);
+          std_manager->GenerateSTDescs(temp_cloud, stds_vec);//todo 这个submap是怎么去绝对值的
           auto t_descriptor_end = std::chrono::high_resolution_clock::now();
           descriptor_time.push_back(
               time_inc(t_descriptor_end, t_descriptor_begin));
@@ -126,7 +126,7 @@ int main(int argc, char **argv) {
           loop_transform.first << 0, 0, 0;
           loop_transform.second = Eigen::Matrix3d::Identity();
           std::vector<std::pair<STDesc, STDesc>> loop_std_pair;
-          if (keyCloudInd > config_setting.skip_near_num_) {
+          if (keyCloudInd > config_setting.skip_near_num_) {//! 最开始数据库低于50的时候不找？
             std_manager->SearchLoop(stds_vec, search_result, loop_transform,
                                     loop_std_pair);
           }
@@ -162,10 +162,10 @@ int main(int argc, char **argv) {
           sensor_msgs::PointCloud2 pub_cloud;
           pcl::toROSMsg(*temp_cloud, pub_cloud);
           pub_cloud.header.frame_id = "camera_init";
-          pubCureentCloud.publish(pub_cloud);
+          pubCureentCloud.publish(pub_cloud);//! 发布当前submap
           pcl::toROSMsg(*std_manager->corner_cloud_vec_.back(), pub_cloud);
           pub_cloud.header.frame_id = "camera_init";
-          pubCurrentCorner.publish(pub_cloud);
+          pubCurrentCorner.publish(pub_cloud);//! 发布当前submap的特征点
 
           if (search_result.first > 0) {
             triggle_loop_num++;
@@ -173,7 +173,7 @@ int main(int argc, char **argv) {
                           pub_cloud);
             pub_cloud.header.frame_id = "camera_init";
             pubMatchedCloud.publish(pub_cloud);
-            slow_loop.sleep();
+            slow_loop.sleep();//! 发布有一定的时间滞后
             pcl::toROSMsg(*std_manager->corner_cloud_vec_[search_result.first],
                           pub_cloud);
             pub_cloud.header.frame_id = "camera_init";
@@ -182,8 +182,8 @@ int main(int argc, char **argv) {
             slow_loop.sleep();
             // getchar();
           }
-          temp_cloud->clear();
-          keyCloudInd++;
+          temp_cloud->clear();//! 清除submap
+          keyCloudInd++;//! 关键帧序号自增
           loop.sleep();
         }
         nav_msgs::Odometry odom;
@@ -196,7 +196,7 @@ int main(int argc, char **argv) {
         odom.pose.pose.orientation.x = q.x();
         odom.pose.pose.orientation.y = q.y();
         odom.pose.pose.orientation.z = q.z();
-        pubOdomAftMapped.publish(odom);
+        pubOdomAftMapped.publish(odom);//! 所有帧都发布odo
         loop.sleep();
         cloudInd++;
       }

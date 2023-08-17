@@ -13,7 +13,7 @@ std::vector<float> read_lidar_data(const std::string lidar_data_path) {
     return nan_data;
     // exit(-1);
   }
-  lidar_data_file.seekg(0, std::ios::end);
+  lidar_data_file.seekg(0, std::ios::end);//todo jin:
   const size_t num_elements = lidar_data_file.tellg() / sizeof(float);
   lidar_data_file.seekg(0, std::ios::beg);
 
@@ -72,7 +72,7 @@ int main(int argc, char **argv) {
   int triggle_loop_num = 0;
   while (ros::ok()) {
     std::stringstream lidar_data_path;
-    lidar_data_path << lidar_path << std::setfill('0') << std::setw(6)
+    lidar_data_path << lidar_path << std::setfill('0') << std::setw(6)//! jin:从这里开始补充到6个字符，前面的字符不变
                     << cloudInd << ".bin";
     std::vector<float> lidar_data = read_lidar_data(lidar_data_path.str());
     if (lidar_data.size() == 0) {
@@ -93,7 +93,7 @@ int main(int argc, char **argv) {
       point = vec2point(pv);
       current_cloud->push_back(point);
     }
-    down_sampling_voxel(*current_cloud, config_setting.ds_size_);
+    down_sampling_voxel(*current_cloud, config_setting.ds_size_);//! jin:降采样
     for (auto pv : current_cloud->points) {
       temp_cloud->points.push_back(pv);
     }
@@ -105,19 +105,19 @@ int main(int argc, char **argv) {
       // step1. Descriptor Extraction
       auto t_descriptor_begin = std::chrono::high_resolution_clock::now();
       std::vector<STDesc> stds_vec;
-      std_manager->GenerateSTDescs(temp_cloud, stds_vec);
+      std_manager->GenerateSTDescs(temp_cloud, stds_vec);//! jin:根据点云，提取特征并创建描述子
       auto t_descriptor_end = std::chrono::high_resolution_clock::now();
       descriptor_time.push_back(time_inc(t_descriptor_end, t_descriptor_begin));
       // step2. Searching Loop
       auto t_query_begin = std::chrono::high_resolution_clock::now();
-      std::pair<int, double> search_result(-1, 0);
+      std::pair<int, double> search_result(-1, 0);//! id和score
       std::pair<Eigen::Vector3d, Eigen::Matrix3d> loop_transform;
       loop_transform.first << 0, 0, 0;
       loop_transform.second = Eigen::Matrix3d::Identity();
       std::vector<std::pair<STDesc, STDesc>> loop_std_pair;
       if (keyCloudInd > config_setting.skip_near_num_) {
         std_manager->SearchLoop(stds_vec, search_result, loop_transform,
-                                loop_std_pair);
+                                loop_std_pair);//! 查找回环
       }
       if (search_result.first > 0) {
         std::cout << "[Loop Detection] triggle loop: " << keyCloudInd << "--"

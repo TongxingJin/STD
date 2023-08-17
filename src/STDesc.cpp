@@ -119,8 +119,8 @@ void load_pose_with_time(
     std::istringstream sin(line);
     std::vector<std::string> Waypoints;
     std::string info;
-    int number = 0;
-    while (getline(sin, info, ' ')) {
+    int number = 0; 
+    while (getline(sin, info, ' ')) {//! jin:以空格分割同一行的内容
       if (number == 0) {
         double time;
         std::stringstream data;
@@ -311,28 +311,28 @@ void STDescManager::GenerateSTDescs(
 
   // step1, voxelization and plane dection
   std::unordered_map<VOXEL_LOC, OctoTree *> voxel_map;
-  init_voxel_map(input_cloud, voxel_map);
+  init_voxel_map(input_cloud, voxel_map);//! jin:分割和计算平面
   pcl::PointCloud<pcl::PointXYZINormal>::Ptr plane_cloud(
       new pcl::PointCloud<pcl::PointXYZINormal>);
-  getPlane(voxel_map, plane_cloud);
+  getPlane(voxel_map, plane_cloud);//! jin:提出该帧所有的平面
   // std::cout << "[Description] planes size:" << plane_cloud->size() <<
   // std::endl;
   plane_cloud_vec_.push_back(plane_cloud);
 
   // step2, build connection for planes in the voxel map
-  build_connection(voxel_map);
+  build_connection(voxel_map);//! jin:建立voxel之间的关联性
 
   // step3, extraction corner points
   pcl::PointCloud<pcl::PointXYZINormal>::Ptr corner_points(
       new pcl::PointCloud<pcl::PointXYZINormal>);
-  corner_extractor(voxel_map, input_cloud, corner_points);
+  corner_extractor(voxel_map, input_cloud, corner_points);//! 将非面点往相邻的面上投影，划分像素，分块取密度梯度最大的像素，恢复点3维坐标，非极大值抑制
   corner_cloud_vec_.push_back(corner_points);
   // std::cout << "[Description] corners size:" << corner_points->size()
   //           << std::endl;
 
   // step4, generate stable triangle descriptors
   stds_vec.clear();
-  build_stdesc(corner_points, stds_vec);
+  build_stdesc(corner_points, stds_vec);//! 计算描述子
   // std::cout << "[Description] stds size:" << stds_vec.size() << std::endl;
 
   // step5, clear memory
@@ -355,7 +355,7 @@ void STDescManager::SearchLoop(
   // step1, select candidates, default number 50
   auto t1 = std::chrono::high_resolution_clock::now();
   std::vector<STDMatchList> candidate_matcher_vec;
-  candidate_selector(stds_vec, candidate_matcher_vec);
+  candidate_selector(stds_vec, candidate_matcher_vec);//! 查找回环
 
   auto t2 = std::chrono::high_resolution_clock::now();
   // step2, select best candidates from rough candidates
@@ -369,7 +369,7 @@ void STDescManager::SearchLoop(
     std::pair<Eigen::Vector3d, Eigen::Matrix3d> relative_pose;
     std::vector<std::pair<STDesc, STDesc>> sucess_match_vec;
     candidate_verify(candidate_matcher_vec[i], verify_score, relative_pose,
-                     sucess_match_vec);
+                     sucess_match_vec);//! 顶点到顶点的icp，以及面与面的匹配
     if (verify_score > best_score) {
       best_score = verify_score;
       best_candidate_id = candidate_matcher_vec[i].match_id_.second;
@@ -459,7 +459,7 @@ void STDescManager::init_voxel_map(
   // #pragma omp parallel for
   // #endif
   for (int i = 0; i < index.size(); i++) {
-    iter_list[i]->second->init_octo_tree();
+    iter_list[i]->second->init_octo_tree();//! jin:计算平面的参数
   }
   // std::cout << "voxel num:" << index.size() << std::endl;
   // std::for_each(
@@ -470,7 +470,7 @@ void STDescManager::init_voxel_map(
 void STDescManager::build_connection(
     std::unordered_map<VOXEL_LOC, OctoTree *> &voxel_map) {
   for (auto iter = voxel_map.begin(); iter != voxel_map.end(); iter++) {
-    if (iter->second->plane_ptr_->is_plane_) {
+    if (iter->second->plane_ptr_->is_plane_) {//! 对于每个平面，计算与nearby6的关联性，双向的
       OctoTree *current_octo = iter->second;
       for (int i = 0; i < 6; i++) {
         VOXEL_LOC neighbor = iter->first;
@@ -488,20 +488,20 @@ void STDescManager::build_connection(
           neighbor.z = neighbor.z - 1;
         }
         auto near = voxel_map.find(neighbor);
-        if (near == voxel_map.end()) {
+        if (near == voxel_map.end()) {//! 不存在该voxel
           current_octo->is_check_connect_[i] = true;
           current_octo->connect_[i] = false;
         } else {
-          if (!current_octo->is_check_connect_[i]) {
+          if (!current_octo->is_check_connect_[i]) {//! 如果还没有检查过
             OctoTree *near_octo = near->second;
             current_octo->is_check_connect_[i] = true;
             int j;
-            if (i >= 3) {
+            if (i >= 3) {//! 相互的
               j = i - 3;
             } else {
               j = i + 3;
             }
-            near_octo->is_check_connect_[j] = true;
+            near_octo->is_check_connect_[j] = true;//! 双向确认检查过了，下面才会判断连接性
             if (near_octo->plane_ptr_->is_plane_) {
               // merge near octo
               Eigen::Vector3d normal_diff = current_octo->plane_ptr_->normal_ -
@@ -513,16 +513,16 @@ void STDescManager::build_connection(
                   normal_add.norm() <
                       config_setting_.plane_merge_normal_thre_) {
                 current_octo->connect_[i] = true;
-                near_octo->connect_[j] = true;
+                near_octo->connect_[j] = true;//! 相互连接
                 current_octo->connect_tree_[i] = near_octo;
                 near_octo->connect_tree_[j] = current_octo;
               } else {
-                current_octo->connect_[i] = false;
+                current_octo->connect_[i] = false;//! 两边都是面，但不是同一个
                 near_octo->connect_[j] = false;
               }
             } else {
-              current_octo->connect_[i] = false;
-              near_octo->connect_[j] = true;
+              current_octo->connect_[i] = false;//? jin:不再继续连接，但是near会向自己连接，证明是边缘？
+              near_octo->connect_[j] = true;//? jin:
               near_octo->connect_tree_[j] = current_octo;
             }
           }
@@ -568,52 +568,52 @@ void STDescManager::corner_extractor(
     }
   }
   for (auto iter = voxel_map.begin(); iter != voxel_map.end(); iter++) {
-    if (!iter->second->plane_ptr_->is_plane_) {
+    if (!iter->second->plane_ptr_->is_plane_) {//! jin:如果当前voxel不是平面，所以可能是相邻voxel所在平面的边缘
       VOXEL_LOC current_position = iter->first;
       OctoTree *current_octo = iter->second;
       int connect_index = -1;
-      for (int i = 0; i < 6; i++) {
-        if (current_octo->connect_[i]) {
+      for (int i = 0; i < 6; i++) {//! 遍历这个非面voxel的6邻，尝试去投影？
+        if (current_octo->connect_[i]) {//! jin:如果存在连接关系，但是near不可能连接current，因为current都不是面。说明current是这个near的边缘
           connect_index = i;
-          OctoTree *connect_octo = current_octo->connect_tree_[connect_index];
+          OctoTree *connect_octo = current_octo->connect_tree_[connect_index];//! jin:相邻的这个节点，是否还需要判断是否为面？
           bool use = false;
           for (int j = 0; j < 6; j++) {
             if (connect_octo->is_check_connect_[j]) {
-              if (connect_octo->connect_[j]) {
+              if (connect_octo->connect_[j]) {//? 如果相邻voxel还有相邻voxel?
                 use = true;
               }
             }
           }
           // if no plane near the voxel, skip
-          if (use == false) {
+          if (use == false) {//! 如果这个near是孤立的，就不应该再投影了
             continue;
           }
           // only project voxels with points num > 10
-          if (current_octo->voxel_points_.size() > 10) {
+          if (current_octo->voxel_points_.size() > 10) {//todo 这一步应该提到最前面
             Eigen::Vector3d projection_normal =
-                current_octo->connect_tree_[connect_index]->plane_ptr_->normal_;
+                current_octo->connect_tree_[connect_index]->plane_ptr_->normal_;//! 需要投影到的面
             Eigen::Vector3d projection_center =
                 current_octo->connect_tree_[connect_index]->plane_ptr_->center_;
-            std::vector<Eigen::Vector3d> proj_points;
+            std::vector<Eigen::Vector3d> proj_points;//! current周围邻居的点，集合在一起做投影
             // proj the boundary voxel and nearby voxel onto adjacent plane
             for (auto voxel_inc : voxel_round) {
               VOXEL_LOC connect_project_position = current_position;
               connect_project_position.x += voxel_inc[0];
               connect_project_position.y += voxel_inc[1];
-              connect_project_position.z += voxel_inc[2];
+              connect_project_position.z += voxel_inc[2];//! 当前voxel的3*3*3邻
               auto iter_near = voxel_map.find(connect_project_position);
               if (iter_near != voxel_map.end()) {
                 bool skip_flag = false;
                 if (!voxel_map[connect_project_position]
-                         ->plane_ptr_->is_plane_) {
-                  if (voxel_map[connect_project_position]->is_project_) {
+                         ->plane_ptr_->is_plane_) {//! 如果近邻也不是平面
+                  if (voxel_map[connect_project_position]->is_project_) {//! 默认是false，如果投影过了
                     for (auto normal : voxel_map[connect_project_position]
                                            ->proj_normal_vec_) {
                       Eigen::Vector3d normal_diff = projection_normal - normal;
                       Eigen::Vector3d normal_add = projection_normal + normal;
                       // check if repeated project
                       if (normal_diff.norm() < 0.5 || normal_add.norm() < 0.5) {
-                        skip_flag = true;
+                        skip_flag = true;//! 如果已经往这个面投影过了
                       }
                     }
                   }
@@ -625,7 +625,7 @@ void STDescManager::corner_extractor(
                        j++) {
                     proj_points.push_back(
                         voxel_map[connect_project_position]->voxel_points_[j]);
-                    voxel_map[connect_project_position]->is_project_ = true;
+                    voxel_map[connect_project_position]->is_project_ = true;//todo 下面这几句与j无关，可以放到for外面
                     voxel_map[connect_project_position]
                         ->proj_normal_vec_.push_back(projection_normal);
                   }
@@ -635,21 +635,21 @@ void STDescManager::corner_extractor(
             // here do the 2D projection and corner extraction
             pcl::PointCloud<pcl::PointXYZINormal>::Ptr sub_corner_points(
                 new pcl::PointCloud<pcl::PointXYZINormal>);
-            extract_corner(projection_center, projection_normal, proj_points,
-                           sub_corner_points);
+            extract_corner(projection_center, projection_normal, proj_points,//! 到这里其实并没有大的面的概念，只是把点往一个面voxel上去做投影
+                           sub_corner_points);//! 点往平面做投影，根据密度梯度提取特征，再恢复3维
             for (auto pi : sub_corner_points->points) {
               prepare_corner_points->push_back(pi);
             }
           }
         }
       }
-    }
+    }//! 以上，只是根据某一个非平面voxel为线索，往面上投影提取特征的过程
   }
-  non_maxi_suppression(prepare_corner_points);
+  non_maxi_suppression(prepare_corner_points);//! 非极大值抑制，只选择梯度最大的
 
   if (config_setting_.maximum_corner_num_ > prepare_corner_points->size()) {
     corner_points = prepare_corner_points;
-  } else {
+  } else {//! 挑选梯度最大的
     std::vector<std::pair<double, int>> attach_vec;
     for (size_t i = 0; i < prepare_corner_points->size(); i++) {
       attach_vec.push_back(std::pair<double, int>(
@@ -674,10 +674,10 @@ void STDescManager::extract_corner(
   double A = proj_normal[0];
   double B = proj_normal[1];
   double C = proj_normal[2];
-  double D = -(A * proj_center[0] + B * proj_center[1] + C * proj_center[2]);
+  double D = -(A * proj_center[0] + B * proj_center[1] + C * proj_center[2]);//! 平面方程
   Eigen::Vector3d x_axis(1, 1, 0);
   if (C != 0) {
-    x_axis[2] = -(A + B) / C;
+    x_axis[2] = -(A + B) / C;//todo 这是什么原理？
   } else if (B != 0) {
     x_axis[1] = -A / B;
   } else {
@@ -691,18 +691,18 @@ void STDescManager::extract_corner(
   double bx = x_axis[1];
   double cx = x_axis[2];
   double dx =
-      -(ax * proj_center[0] + bx * proj_center[1] + cx * proj_center[2]);
+      -(ax * proj_center[0] + bx * proj_center[1] + cx * proj_center[2]);//! x轴为法向的面方程
   double ay = y_axis[0];
   double by = y_axis[1];
   double cy = y_axis[2];
   double dy =
-      -(ay * proj_center[0] + by * proj_center[1] + cy * proj_center[2]);
+      -(ay * proj_center[0] + by * proj_center[1] + cy * proj_center[2]);//! y轴为法向的面方程
   std::vector<Eigen::Vector2d> point_list_2d;
   for (size_t i = 0; i < proj_points.size(); i++) {
     double x = proj_points[i][0];
     double y = proj_points[i][1];
     double z = proj_points[i][2];
-    double dis = fabs(x * A + y * B + z * C + D);
+    double dis = fabs(x * A + y * B + z * C + D);//! 点到面的距离
     if (dis < dis_threshold_min || dis > dis_threshold_max) {
       continue;
     }
@@ -713,13 +713,13 @@ void STDescManager::extract_corner(
     cur_project[1] = (-B * (A * x + C * z + D) + y * (A * A + C * C)) /
                      (A * A + B * B + C * C);
     cur_project[2] = (-C * (A * x + B * y + D) + z * (A * A + B * B)) /
-                     (A * A + B * B + C * C);
+                     (A * A + B * B + C * C);//todo 某种往新坐标系下的投影？
     pcl::PointXYZ p;
     p.x = cur_project[0];
     p.y = cur_project[1];
     p.z = cur_project[2];
     double project_x =
-        cur_project[0] * ay + cur_project[1] * by + cur_project[2] * cy + dy;
+        cur_project[0] * ay + cur_project[1] * by + cur_project[2] * cy + dy;//? y为法向的面的距离，不应该是y坐标么
     double project_y =
         cur_project[0] * ax + cur_project[1] * bx + cur_project[2] * cx + dx;
     Eigen::Vector2d p_2d(project_x, project_y);
@@ -773,7 +773,7 @@ void STDescManager::extract_corner(
     int y_index = (int)((point_list_2d[i][1] - min_y) / resolution);
     mean_x_array[x_index][y_index] += point_list_2d[i][0];
     mean_y_array[x_index][y_index] += point_list_2d[i][1];
-    img_count_array[x_index][y_index]++;
+    img_count_array[x_index][y_index]++;//! jin:落在这个像素里点的数量
     img_container[x_index][y_index].push_back(point_list_2d[i]);
   }
   // calc gradient
@@ -818,18 +818,18 @@ void STDescManager::extract_corner(
            x_index < (x_segment_index + 1) * segmen_base_num; x_index++) {
         for (int y_index = y_segment_index * segmen_base_num;
              y_index < (y_segment_index + 1) * segmen_base_num; y_index++) {
-          if (img_count_array[x_index][y_index] > max_gradient) {
+          if (img_count_array[x_index][y_index] > max_gradient) {//todo 这两行应该是bug吧
             max_gradient = img_count_array[x_index][y_index];
             max_gradient_x_index = x_index;
             max_gradient_y_index = y_index;
           }
         }
       }
-      if (max_gradient >= config_setting_.corner_thre_) {
+      if (max_gradient >= config_setting_.corner_thre_) {//! 每个5*5格子里找到一个梯度最大的
         max_gradient_vec.push_back(max_gradient);
         max_gradient_x_index_vec.push_back(max_gradient_x_index);
         max_gradient_y_index_vec.push_back(max_gradient_y_index);
-      }
+      }//todo 实际上，这里是按照点密度算的提取，跟论文中用点到面的高度是不一致的
     }
   }
   // filter out line
@@ -866,9 +866,9 @@ void STDescManager::extract_corner(
       double py = mean_y_array[max_gradient_x_index_vec[i]]
                               [max_gradient_y_index_vec[i]] /
                   img_count_array[max_gradient_x_index_vec[i]]
-                                 [max_gradient_y_index_vec[i]];
+                                 [max_gradient_y_index_vec[i]];//! 该像素中点的均值
       // reproject on 3D space
-      Eigen::Vector3d coord = py * x_axis + px * y_axis + proj_center;
+      Eigen::Vector3d coord = py * x_axis + px * y_axis + proj_center;//todo 
       pcl::PointXYZINormal pi;
       pi.x = coord[0];
       pi.y = coord[1];
@@ -877,7 +877,7 @@ void STDescManager::extract_corner(
       pi.normal_x = proj_normal[0];
       pi.normal_y = proj_normal[1];
       pi.normal_z = proj_normal[2];
-      corner_points->points.push_back(pi);
+      corner_points->points.push_back(pi);//! 这些点都是根据投影到某个像素里的所有点计算出来的
     }
   }
   return;
@@ -940,7 +940,7 @@ void STDescManager::build_stdesc(
   kd_tree->setInputCloud(corner_points);
   std::vector<int> pointIdxNKNSearch(near_num);
   std::vector<float> pointNKNSquaredDistance(near_num);
-  // Search N nearest corner points to form stds.
+  // Search N nearest corner points to form stds.//! 只需要选择附近一定数量的点，来创建描述子
   for (size_t i = 0; i < corner_points->size(); i++) {
     pcl::PointXYZINormal searchPoint = corner_points->points[i];
     if (kd_tree->nearestKSearch(searchPoint, near_num, pointIdxNKNSearch,
@@ -985,7 +985,7 @@ void STDescManager::build_stdesc(
             temp = a;
             a = b;
             b = temp;
-            l_temp = l1;
+            l_temp = l1;//todo 交换l是什么原因呢
             l1 = l2;
             l2 = l_temp;
           }
@@ -1004,13 +1004,13 @@ void STDescManager::build_stdesc(
             l_temp = l1;
             l1 = l2;
             l2 = l_temp;
-          }
+          }//! abc数值依次递增
           // check augnmentation
           pcl::PointXYZ d_p;
           d_p.x = a * 1000;
           d_p.y = b * 1000;
           d_p.z = c * 1000;
-          VOXEL_LOC position((int64_t)d_p.x, (int64_t)d_p.y, (int64_t)d_p.z);
+          VOXEL_LOC position((int64_t)d_p.x, (int64_t)d_p.y, (int64_t)d_p.z);//! 边长作为key
           auto iter = feat_map.find(position);
           Eigen::Vector3d normal_1, normal_2, normal_3;
           if (iter == feat_map.end()) {
@@ -1107,24 +1107,24 @@ void STDescManager::candidate_selector(
   omp_set_num_threads(MP_PROC_NUM);
 #pragma omp parallel for
 #endif
-  for (size_t i = 0; i < stds_vec.size(); i++) {
+  for (size_t i = 0; i < stds_vec.size(); i++) {//! 对于这个描述子
     STDesc src_std = stds_vec[i];
     STDesc_LOC position;
     int best_index = 0;
     STDesc_LOC best_position;
     double dis_threshold =
-        src_std.side_length_.norm() * config_setting_.rough_dis_threshold_;
+        src_std.side_length_.norm() * config_setting_.rough_dis_threshold_;//! 周长的一定比例
     for (auto voxel_inc : voxel_round) {
       position.x = (int)(src_std.side_length_[0] + voxel_inc[0]);
       position.y = (int)(src_std.side_length_[1] + voxel_inc[1]);
-      position.z = (int)(src_std.side_length_[2] + voxel_inc[2]);
+      position.z = (int)(src_std.side_length_[2] + voxel_inc[2]);//todo 故意加一定偏置？
       Eigen::Vector3d voxel_center((double)position.x + 0.5,
                                    (double)position.y + 0.5,
-                                   (double)position.z + 0.5);
+                                   (double)position.z + 0.5);//todo ?
       if ((src_std.side_length_ - voxel_center).norm() < 1.5) {
         auto iter = data_base_.find(position);
         if (iter != data_base_.end()) {
-          for (size_t j = 0; j < data_base_[position].size(); j++) {
+          for (size_t j = 0; j < data_base_[position].size(); j++) {//! 同样的position能找到很多个候选的帧
             if ((src_std.frame_id_ - data_base_[position][j].frame_id_) >
                 config_setting_.skip_near_num_) {
               double dis =
@@ -1149,7 +1149,7 @@ void STDescManager::candidate_selector(
                   final_match_cnt++;
                   useful_match[i] = true;
                   useful_match_position[i].push_back(position);
-                  useful_match_index[i].push_back(j);
+                  useful_match_index[i].push_back(j);//! 这个position结果中的第j个
                 }
               }
             }
@@ -1165,11 +1165,11 @@ void STDescManager::candidate_selector(
   std::vector<Eigen::Vector2i, Eigen::aligned_allocator<Eigen::Vector2i>>
       index_recorder;
   for (size_t i = 0; i < useful_match.size(); i++) {
-    if (useful_match[i]) {
+    if (useful_match[i]) {//! 如果这个描述子找到了关联帧
       for (size_t j = 0; j < useful_match_index[i].size(); j++) {
         match_array[data_base_[useful_match_position[i][j]]
                               [useful_match_index[i][j]]
-                                  .frame_id_] += 1;
+                                  .frame_id_] += 1;//! 这一帧的权重+1
         Eigen::Vector2i match_index(i, j);
         index_recorder.push_back(match_index);
         match_index_vec.push_back(
@@ -1191,7 +1191,7 @@ void STDescManager::candidate_selector(
     }
     STDMatchList match_triangle_list;
     if (max_vote_index >= 0 && max_vote >= 5) {
-      match_array[max_vote_index] = 0;
+      match_array[max_vote_index] = 0;//! 归零当前最好，方便找下一个
       match_triangle_list.match_id_.first = current_frame_id_;
       match_triangle_list.match_id_.second = max_vote_index;
       for (size_t i = 0; i < index_recorder.size(); i++) {
@@ -1203,7 +1203,7 @@ void STDescManager::candidate_selector(
                                               [index_recorder[i][1]]]
                         [useful_match_index[index_recorder[i][0]]
                                            [index_recorder[i][1]]];
-          match_triangle_list.match_list_.push_back(single_match_pair);
+          match_triangle_list.match_list_.push_back(single_match_pair);//! 两帧之间匹配上的描述子对
         }
       }
       candidate_matcher_vec.push_back(match_triangle_list);
@@ -1238,7 +1238,7 @@ void STDescManager::candidate_verify(
     int vote = 0;
     Eigen::Matrix3d test_rot;
     Eigen::Vector3d test_t;
-    triangle_solver(single_pair, test_t, test_rot);
+    triangle_solver(single_pair, test_t, test_rot);//! 三角形和三角形之间的icp匹配
     for (size_t j = 0; j < candidate_matcher.match_list_.size(); j++) {
       auto verify_pair = candidate_matcher.match_list_[j];
       Eigen::Vector3d A = verify_pair.first.vertex_A_;
@@ -1256,7 +1256,7 @@ void STDescManager::candidate_verify(
       }
     }
     mylock.lock();
-    vote_list[i] = vote;
+    vote_list[i] = vote;//! 对第i个candidate的顶点icp匹配结果
     mylock.unlock();
   }
   int max_vote_index = 0;
@@ -1288,12 +1288,12 @@ void STDescManager::candidate_verify(
       double dis_C = (C_transform - verify_pair.second.vertex_C_).norm();
       if (dis_A < dis_threshold && dis_B < dis_threshold &&
           dis_C < dis_threshold) {
-        sucess_match_vec.push_back(verify_pair);
+        sucess_match_vec.push_back(verify_pair);//! 再计算一遍，这次把匹配度最好的这一帧的，匹配上的描述子保存下来
       }
     }
     verify_score = plane_geometric_verify(
         plane_cloud_vec_.back(),
-        plane_cloud_vec_[candidate_matcher.match_id_.second], relative_pose);
+        plane_cloud_vec_[candidate_matcher.match_id_.second], relative_pose);//! 计算所有平面整体的匹配度
   } else {
     verify_score = -1;
   }
@@ -1376,7 +1376,7 @@ double STDescManager::plane_geometric_verify(
              normal_add.norm() < normal_threshold) &&
             point_to_plane < dis_threshold) {
           useful_match++;
-          break;
+          break;//! 平面匹配上了，break
         }
       }
     }
@@ -1487,21 +1487,21 @@ void OctoTree::init_plane() {
   Eigen::Matrix3cd evecs = es.eigenvectors();
   Eigen::Vector3cd evals = es.eigenvalues();
   Eigen::Vector3d evalsReal;
-  evalsReal = evals.real();
+  evalsReal = evals.real();//todo jin:
   Eigen::Matrix3d::Index evalsMin, evalsMax;
-  evalsReal.rowwise().sum().minCoeff(&evalsMin);
+  evalsReal.rowwise().sum().minCoeff(&evalsMin);//todo jin:这个不是默认排序好了么？
   evalsReal.rowwise().sum().maxCoeff(&evalsMax);
   int evalsMid = 3 - evalsMin - evalsMax;
-  if (evalsReal(evalsMin) < config_setting_.plane_detection_thre_) {
+  if (evalsReal(evalsMin) < config_setting_.plane_detection_thre_) {//! jin:最小的足够小
     plane_ptr_->normal_ << evecs.real()(0, evalsMin), evecs.real()(1, evalsMin),
-        evecs.real()(2, evalsMin);
+        evecs.real()(2, evalsMin);//! jin：最小的特征向量
     plane_ptr_->min_eigen_value_ = evalsReal(evalsMin);
-    plane_ptr_->radius_ = sqrt(evalsReal(evalsMax));
+    plane_ptr_->radius_ = sqrt(evalsReal(evalsMax));//? jin:
     plane_ptr_->is_plane_ = true;
 
     plane_ptr_->intercept_ = -(plane_ptr_->normal_(0) * plane_ptr_->center_(0) +
                                plane_ptr_->normal_(1) * plane_ptr_->center_(1) +
-                               plane_ptr_->normal_(2) * plane_ptr_->center_(2));
+                               plane_ptr_->normal_(2) * plane_ptr_->center_(2));//! jin:点到面的距离
     plane_ptr_->p_center_.x = plane_ptr_->center_(0);
     plane_ptr_->p_center_.y = plane_ptr_->center_(1);
     plane_ptr_->p_center_.z = plane_ptr_->center_(2);
@@ -1515,6 +1515,6 @@ void OctoTree::init_plane() {
 
 void OctoTree::init_octo_tree() {
   if (voxel_points_.size() > config_setting_.voxel_init_num_) {
-    init_plane();
+    init_plane();//! jin:每一个栅格都尝试估计平面
   }
 }

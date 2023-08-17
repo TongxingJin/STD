@@ -94,8 +94,8 @@ typedef struct Plane {
 } Plane;
 
 typedef struct STDMatchList {
-  std::vector<std::pair<STDesc, STDesc>> match_list_;
-  std::pair<int, int> match_id_;
+  std::vector<std::pair<STDesc, STDesc>> match_list_;//! 两帧之间匹配上的描述子对
+  std::pair<int, int> match_id_;//! 两帧的id
   double mean_dis_;
 } STDMatchList;
 

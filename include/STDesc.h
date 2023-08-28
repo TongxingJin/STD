@@ -61,7 +61,7 @@ typedef struct ConfigSetting {
 // Structure for Stabel Triangle Descriptor
 typedef struct STDesc {
   // the side lengths of STDesc, arranged from short to long
-  Eigen::Vector3d side_length_;
+  Eigen::Vector3d side_length_;//! 边长是以0.2m为单位的
 
   // projection angle between vertices
   Eigen::Vector3d angle_;
@@ -309,6 +309,10 @@ public:
       const pcl::PointCloud<pcl::PointXYZINormal>::Ptr &source_cloud,
       const pcl::PointCloud<pcl::PointXYZINormal>::Ptr &target_cloud,
       std::pair<Eigen::Vector3d, Eigen::Matrix3d> &transform);
+  void ClearTmp(){
+    plane_cloud_vec_.pop_back();
+    corner_cloud_vec_.pop_back();
+  }
 
 private:
   /*Following are sub-processing functions*/

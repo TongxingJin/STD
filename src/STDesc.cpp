@@ -203,10 +203,10 @@ void publish_std_pairs(
     p.z = var.second.vertex_A_[2];
     Eigen::Vector3d t_p;
     t_p << p.x, p.y, p.z;
-    p.x = t_p[0];
+    p.x = t_p[0];//todo 交换的意义是什么？只保留整数部分？
     p.y = t_p[1];
     p.z = t_p[2];
-    m_line.points.push_back(p);
+    m_line.points.push_back(p);//! second的A
     p.x = var.second.vertex_B_[0];
     p.y = var.second.vertex_B_[1];
     p.z = var.second.vertex_B_[2];
@@ -214,8 +214,8 @@ void publish_std_pairs(
     p.x = t_p[0];
     p.y = t_p[1];
     p.z = t_p[2];
-    m_line.points.push_back(p);
-    ma_line.markers.push_back(m_line);
+    m_line.points.push_back(p);//! second的B
+    ma_line.markers.push_back(m_line);//! second的AB之间画线
     m_line.id++;
     m_line.points.clear();
     p.x = var.second.vertex_C_[0];
@@ -234,7 +234,7 @@ void publish_std_pairs(
     p.y = t_p[1];
     p.z = t_p[2];
     m_line.points.push_back(p);
-    ma_line.markers.push_back(m_line);
+    ma_line.markers.push_back(m_line);//! second的CB之间画线
     m_line.id++;
     m_line.points.clear();
     p.x = var.second.vertex_C_[0];
@@ -253,14 +253,14 @@ void publish_std_pairs(
     p.y = t_p[1];
     p.z = t_p[2];
     m_line.points.push_back(p);
-    ma_line.markers.push_back(m_line);
+    ma_line.markers.push_back(m_line);//! second的CA之间画线
     m_line.id++;
     m_line.points.clear();
     // another
     m_line.points.clear();
     m_line.color.r = 1;
     m_line.color.g = 1;
-    m_line.color.b = 1;
+    m_line.color.b = 1;//! 颜色修改成白色
     p.x = var.first.vertex_A_[0];
     p.y = var.first.vertex_A_[1];
     p.z = var.first.vertex_A_[2];
@@ -293,12 +293,23 @@ void publish_std_pairs(
     m_line.points.push_back(p);
     ma_line.markers.push_back(m_line);
     m_line.id++;
-    m_line.points.clear();
+    m_line.points.clear();//! 至此，完成了一对描述子中的6条线
   }
-  for (int j = 0; j < 100 * 6; j++) {
-    m_line.color.a = 0.00;
+  // for (int j = 0; j < 100 * 6; j++) {
+  //   m_line.color.a = 0.00;
+  //   ma_line.markers.push_back(m_line);
+  //   m_line.id++;
+  // }
+  int compensate_size = 600 - ma_line.markers.size();
+  while(compensate_size > 0){
+    geometry_msgs::Point p;
+    p.x = p.y = p.z = 0;
+    m_line.points.push_back(p);
+    m_line.points.push_back(p);
+    m_line.color.a = 0.0;
     ma_line.markers.push_back(m_line);
     m_line.id++;
+    compensate_size--;
   }
   std_publisher.publish(ma_line);
   m_line.id = 0;
@@ -314,9 +325,9 @@ void STDescManager::GenerateSTDescs(
   init_voxel_map(input_cloud, voxel_map);//! jin:分割和计算平面
   pcl::PointCloud<pcl::PointXYZINormal>::Ptr plane_cloud(
       new pcl::PointCloud<pcl::PointXYZINormal>);
-  getPlane(voxel_map, plane_cloud);//! jin:提出该帧所有的平面
-  // std::cout << "[Description] planes size:" << plane_cloud->size() <<
-  // std::endl;
+  getPlane(voxel_map, plane_cloud);//! jin:所有平面栅格中点的均值和法向
+  std::cout << "[Description] planes size:" << plane_cloud->size() <<
+  std::endl;
   plane_cloud_vec_.push_back(plane_cloud);
 
   // step2, build connection for planes in the voxel map
@@ -325,15 +336,15 @@ void STDescManager::GenerateSTDescs(
   // step3, extraction corner points
   pcl::PointCloud<pcl::PointXYZINormal>::Ptr corner_points(
       new pcl::PointCloud<pcl::PointXYZINormal>);
-  corner_extractor(voxel_map, input_cloud, corner_points);//! 将非面点往相邻的面上投影，划分像素，分块取密度梯度最大的像素，恢复点3维坐标，非极大值抑制
+  corner_extractor(voxel_map, input_cloud, corner_points);//! 将非面点往相邻的面上投影，划分像素，分块取点数最多的像素，恢复点3维坐标，利用梯度非极大值抑制
   corner_cloud_vec_.push_back(corner_points);
-  // std::cout << "[Description] corners size:" << corner_points->size()
-  //           << std::endl;
+  std::cout << "[Description] corners size:" << corner_points->size()
+            << std::endl;
 
   // step4, generate stable triangle descriptors
   stds_vec.clear();
   build_stdesc(corner_points, stds_vec);//! 计算描述子
-  // std::cout << "[Description] stds size:" << stds_vec.size() << std::endl;
+  std::cout << "[Description] stds size:" << stds_vec.size() << std::endl;
 
   // step5, clear memory
   for (auto iter = voxel_map.begin(); iter != voxel_map.end(); iter++) {
@@ -355,7 +366,8 @@ void STDescManager::SearchLoop(
   // step1, select candidates, default number 50
   auto t1 = std::chrono::high_resolution_clock::now();
   std::vector<STDMatchList> candidate_matcher_vec;
-  candidate_selector(stds_vec, candidate_matcher_vec);//! 查找回环
+  candidate_selector(stds_vec, candidate_matcher_vec);//! 查找回环，会通过std找到很多个回环，
+  std::cout << candidate_matcher_vec.size() << " candidates is selected!" << std::endl;
 
   auto t2 = std::chrono::high_resolution_clock::now();
   // step2, select best candidates from rough candidates
@@ -369,8 +381,8 @@ void STDescManager::SearchLoop(
     std::pair<Eigen::Vector3d, Eigen::Matrix3d> relative_pose;
     std::vector<std::pair<STDesc, STDesc>> sucess_match_vec;
     candidate_verify(candidate_matcher_vec[i], verify_score, relative_pose,
-                     sucess_match_vec);//! 顶点到顶点的icp，以及面与面的匹配
-    if (verify_score > best_score) {
+                     sucess_match_vec);//! 顶点到顶点的icp+RANSAC计算位姿，面与面的匹配进行check
+    if (verify_score > best_score) {//! 一定比例的面符合这个T，只保留几何确认得分最高的
       best_score = verify_score;
       best_candidate_id = candidate_matcher_vec[i].match_id_.second;
       best_transform = relative_pose;
@@ -384,7 +396,7 @@ void STDescManager::SearchLoop(
   //           << " ms, candidate verify: " << time_inc(t3, t2) << "ms"
   //           << std::endl;
 
-  if (best_score > config_setting_.icp_threshold_) {
+  if (best_score > config_setting_.icp_threshold_) {//! 最优的icp得分还要超过这个阈值
     loop_result = std::pair<int, double>(best_candidate_id, best_score);
     loop_transform = best_transform;
     loop_std_pair = best_sucess_match_vec;
@@ -401,7 +413,7 @@ void STDescManager::AddSTDescs(const std::vector<STDesc> &stds_vec) {
   for (auto single_std : stds_vec) {
     // calculate the position of single std
     STDesc_LOC position;
-    position.x = (int)(single_std.side_length_[0] + 0.5);
+    position.x = (int)(single_std.side_length_[0] + 0.5);//! 边长是以0.2m为单位的
     position.y = (int)(single_std.side_length_[1] + 0.5);
     position.z = (int)(single_std.side_length_[2] + 0.5);
     position.a = (int)(single_std.angle_[0]);
@@ -489,10 +501,10 @@ void STDescManager::build_connection(
         }
         auto near = voxel_map.find(neighbor);
         if (near == voxel_map.end()) {//! 不存在该voxel
-          current_octo->is_check_connect_[i] = true;
+          current_octo->is_check_connect_[i] = true;//! 没法设置对方了
           current_octo->connect_[i] = false;
         } else {
-          if (!current_octo->is_check_connect_[i]) {//! 如果还没有检查过
+          if (!current_octo->is_check_connect_[i]) {//! 如果还没有检查过，因为是双向的
             OctoTree *near_octo = near->second;
             current_octo->is_check_connect_[i] = true;
             int j;
@@ -502,7 +514,7 @@ void STDescManager::build_connection(
               j = i + 3;
             }
             near_octo->is_check_connect_[j] = true;//! 双向确认检查过了，下面才会判断连接性
-            if (near_octo->plane_ptr_->is_plane_) {
+            if (near_octo->plane_ptr_->is_plane_) {//! 如果邻居也是平面
               // merge near octo
               Eigen::Vector3d normal_diff = current_octo->plane_ptr_->normal_ -
                                             near_octo->plane_ptr_->normal_;
@@ -579,7 +591,7 @@ void STDescManager::corner_extractor(
           bool use = false;
           for (int j = 0; j < 6; j++) {
             if (connect_octo->is_check_connect_[j]) {
-              if (connect_octo->connect_[j]) {//? 如果相邻voxel还有相邻voxel?
+              if (connect_octo->connect_[j]) {//! 如果相邻voxel还有相邻面voxel，不是孤立的平面
                 use = true;
               }
             }
@@ -589,12 +601,13 @@ void STDescManager::corner_extractor(
             continue;
           }
           // only project voxels with points num > 10
+          //! 如果邻居是非孤立的面
           if (current_octo->voxel_points_.size() > 10) {//todo 这一步应该提到最前面
             Eigen::Vector3d projection_normal =
                 current_octo->connect_tree_[connect_index]->plane_ptr_->normal_;//! 需要投影到的面
             Eigen::Vector3d projection_center =
                 current_octo->connect_tree_[connect_index]->plane_ptr_->center_;
-            std::vector<Eigen::Vector3d> proj_points;//! current周围邻居的点，集合在一起做投影
+            std::vector<Eigen::Vector3d> proj_points;//! current周围邻居的中非面voxel中的点，集合在一起做投影
             // proj the boundary voxel and nearby voxel onto adjacent plane
             for (auto voxel_inc : voxel_round) {
               VOXEL_LOC connect_project_position = current_position;
@@ -636,13 +649,14 @@ void STDescManager::corner_extractor(
             pcl::PointCloud<pcl::PointXYZINormal>::Ptr sub_corner_points(
                 new pcl::PointCloud<pcl::PointXYZINormal>);
             extract_corner(projection_center, projection_normal, proj_points,//! 到这里其实并没有大的面的概念，只是把点往一个面voxel上去做投影
-                           sub_corner_points);//! 点往平面做投影，根据密度梯度提取特征，再恢复3维
+                           sub_corner_points);//! 点往平面做投影，像素，计算像素内点数，窗口内取极值完成均匀化，像素内的二维点恢复出三维点作为角点
             for (auto pi : sub_corner_points->points) {
               prepare_corner_points->push_back(pi);
             }
+            //! 以上，把非面栅格周围3*3*3邻居中的非面点，往该非面栅格6邻域中的非孤立面voxel所在的平面上做投影
           }
         }
-      }
+      }//! 6邻域平面上都尝试投影一次
     }//! 以上，只是根据某一个非平面voxel为线索，往面上投影提取特征的过程
   }
   non_maxi_suppression(prepare_corner_points);//! 非极大值抑制，只选择梯度最大的
@@ -674,10 +688,10 @@ void STDescManager::extract_corner(
   double A = proj_normal[0];
   double B = proj_normal[1];
   double C = proj_normal[2];
-  double D = -(A * proj_center[0] + B * proj_center[1] + C * proj_center[2]);//! 平面方程
+  double D = -(A * proj_center[0] + B * proj_center[1] + C * proj_center[2]);//! 平面方程，截距，d
   Eigen::Vector3d x_axis(1, 1, 0);
   if (C != 0) {
-    x_axis[2] = -(A + B) / C;//todo 这是什么原理？
+    x_axis[2] = -(A + B) / C;//! 指定任意与ABC垂直的法向
   } else if (B != 0) {
     x_axis[1] = -A / B;
   } else {
@@ -691,12 +705,12 @@ void STDescManager::extract_corner(
   double bx = x_axis[1];
   double cx = x_axis[2];
   double dx =
-      -(ax * proj_center[0] + bx * proj_center[1] + cx * proj_center[2]);//! x轴为法向的面方程
+      -(ax * proj_center[0] + bx * proj_center[1] + cx * proj_center[2]);//! 原点和中心连线在x轴上的投影
   double ay = y_axis[0];
   double by = y_axis[1];
   double cy = y_axis[2];
   double dy =
-      -(ay * proj_center[0] + by * proj_center[1] + cy * proj_center[2]);//! y轴为法向的面方程
+      -(ay * proj_center[0] + by * proj_center[1] + cy * proj_center[2]);//! 原点和中心连线在y轴上的投影
   std::vector<Eigen::Vector2d> point_list_2d;
   for (size_t i = 0; i < proj_points.size(); i++) {
     double x = proj_points[i][0];
@@ -713,13 +727,13 @@ void STDescManager::extract_corner(
     cur_project[1] = (-B * (A * x + C * z + D) + y * (A * A + C * C)) /
                      (A * A + B * B + C * C);
     cur_project[2] = (-C * (A * x + B * y + D) + z * (A * A + B * B)) /
-                     (A * A + B * B + C * C);//todo 某种往新坐标系下的投影？
+                     (A * A + B * B + C * C);//todo 某种往新坐标系下的投影？两个坐标系之间差了平移和旋转，这里应该是在坐标转换
     pcl::PointXYZ p;
     p.x = cur_project[0];
     p.y = cur_project[1];
     p.z = cur_project[2];
     double project_x =
-        cur_project[0] * ay + cur_project[1] * by + cur_project[2] * cy + dy;//? y为法向的面的距离，不应该是y坐标么
+        cur_project[0] * ay + cur_project[1] * by + cur_project[2] * cy + dy;//todo y为法向的面的距离，不应该是y坐标么
     double project_y =
         cur_project[0] * ax + cur_project[1] * bx + cur_project[2] * cx + dx;
     Eigen::Vector2d p_2d(project_x, project_y);
@@ -751,7 +765,7 @@ void STDescManager::extract_corner(
   double segmen_len = segmen_base_num * resolution;
   int x_segment_num = (max_x - min_x) / segmen_len + 1;
   int y_segment_num = (max_y - min_y) / segmen_len + 1;
-  int x_axis_len = (int)((max_x - min_x) / resolution + segmen_base_num);
+  int x_axis_len = (int)((max_x - min_x) / resolution + segmen_base_num);//todo segmen_base_num一组，这里在进行补齐？
   int y_axis_len = (int)((max_y - min_y) / resolution + segmen_base_num);
   std::vector<Eigen::Vector2d> img_container[x_axis_len][y_axis_len];
   double img_count_array[x_axis_len][y_axis_len] = {0};
@@ -815,17 +829,18 @@ void STDescManager::extract_corner(
       int max_gradient_x_index = -10;
       int max_gradient_y_index = -10;
       for (int x_index = x_segment_index * segmen_base_num;
-           x_index < (x_segment_index + 1) * segmen_base_num; x_index++) {
+           x_index < (x_segment_index + 1) * segmen_base_num; x_index++) {//! 一定的窗口内只提取一个，均匀化
         for (int y_index = y_segment_index * segmen_base_num;
              y_index < (y_segment_index + 1) * segmen_base_num; y_index++) {
-          if (img_count_array[x_index][y_index] > max_gradient) {//todo 这两行应该是bug吧
+          if (img_count_array[x_index][y_index] > max_gradient) {//todo 这样的话，其实还是只看点的个数，跟梯度完全没关系。梯度在非极大值抑制的时候用
+          // if (img_count_array[x_index][y_index] > max_gradient) {//! 修复
             max_gradient = img_count_array[x_index][y_index];
             max_gradient_x_index = x_index;
             max_gradient_y_index = y_index;
           }
         }
       }
-      if (max_gradient >= config_setting_.corner_thre_) {//! 每个5*5格子里找到一个梯度最大的
+      if (max_gradient >= config_setting_.corner_thre_) {//! 每个5*5格子里找到一个点数最多
         max_gradient_vec.push_back(max_gradient);
         max_gradient_x_index_vec.push_back(max_gradient_x_index);
         max_gradient_y_index_vec.push_back(max_gradient_y_index);
@@ -866,7 +881,7 @@ void STDescManager::extract_corner(
       double py = mean_y_array[max_gradient_x_index_vec[i]]
                               [max_gradient_y_index_vec[i]] /
                   img_count_array[max_gradient_x_index_vec[i]]
-                                 [max_gradient_y_index_vec[i]];//! 该像素中点的均值
+                                 [max_gradient_y_index_vec[i]];//! 该像素中二维点的均值
       // reproject on 3D space
       Eigen::Vector3d coord = py * x_axis + px * y_axis + proj_center;//todo 
       pcl::PointXYZINormal pi;
@@ -980,7 +995,7 @@ void STDescManager::build_stdesc(
           Eigen::Vector3i l_temp;
           l1 << 1, 2, 0;
           l2 << 1, 0, 3;
-          l3 << 0, 2, 3;
+          l3 << 0, 2, 3;//!这个l3中的0标志着l3没被交换过
           if (a > b) {
             temp = a;
             a = b;
@@ -1010,12 +1025,12 @@ void STDescManager::build_stdesc(
           d_p.x = a * 1000;
           d_p.y = b * 1000;
           d_p.z = c * 1000;
-          VOXEL_LOC position((int64_t)d_p.x, (int64_t)d_p.y, (int64_t)d_p.z);//! 边长作为key
+          VOXEL_LOC position((int64_t)d_p.x, (int64_t)d_p.y, (int64_t)d_p.z);//! 边长作为key，毫米
           auto iter = feat_map.find(position);
           Eigen::Vector3d normal_1, normal_2, normal_3;
           if (iter == feat_map.end()) {
             Eigen::Vector3d vertex_attached;
-            if (l1[0] == l2[0]) {
+            if (l1[0] == l2[0]) {//! 不管ab有没有交换过
               A << p1.x, p1.y, p1.z;
               normal_1 << p1.normal_x, p1.normal_y, p1.normal_z;
               vertex_attached[0] = p1.intensity;
@@ -1055,19 +1070,19 @@ void STDescManager::build_stdesc(
               vertex_attached[2] = p3.intensity;
             }
             STDesc single_descriptor;
-            single_descriptor.vertex_A_ = A;
+            single_descriptor.vertex_A_ = A;//! 最短边和次短边之间的点
             single_descriptor.vertex_B_ = B;
             single_descriptor.vertex_C_ = C;
             single_descriptor.center_ = (A + B + C) / 3;
             single_descriptor.vertex_attached_ = vertex_attached;
-            single_descriptor.side_length_ << scale * a, scale * b, scale * c;
+            single_descriptor.side_length_ << scale * a, scale * b, scale * c;//! 边长是以0.2m为单位的
             single_descriptor.angle_[0] = fabs(5 * normal_1.dot(normal_2));
             single_descriptor.angle_[1] = fabs(5 * normal_1.dot(normal_3));
             single_descriptor.angle_[2] = fabs(5 * normal_3.dot(normal_2));
             // single_descriptor.angle << 0, 0, 0;
             single_descriptor.frame_id_ = current_frame_id_;
             Eigen::Matrix3d triangle_positon;
-            feat_map[position] = true;
+            feat_map[position] = true;//! position是以mm为单位的
             stds_vec.push_back(single_descriptor);
           }
         }
@@ -1126,12 +1141,12 @@ void STDescManager::candidate_selector(
         if (iter != data_base_.end()) {
           for (size_t j = 0; j < data_base_[position].size(); j++) {//! 同样的position能找到很多个候选的帧
             if ((src_std.frame_id_ - data_base_[position][j].frame_id_) >
-                config_setting_.skip_near_num_) {
+                config_setting_.skip_near_num_) {//! 一定帧以内的，不进行回环检测
               double dis =
                   (src_std.side_length_ - data_base_[position][j].side_length_)
                       .norm();
               // rough filter with side lengths
-              if (dis < dis_threshold) {
+              if (dis < dis_threshold) {//! 边长之差
                 dis_match_cnt++;
                 // rough filter with vertex attached info
                 double vertex_attach_diff =
@@ -1141,14 +1156,14 @@ void STDescManager::candidate_selector(
                         .norm() /
                     (src_std.vertex_attached_ +
                      data_base_[position][j].vertex_attached_)
-                        .norm();
+                        .norm();//! src_std.vertex_attached_向量中保存的是每个角点在像素投影时落进来的点数
                 // std::cout << "vertex diff:" << vertex_attach_diff <<
                 // std::endl;
                 if (vertex_attach_diff <
                     config_setting_.vertex_diff_threshold_) {
                   final_match_cnt++;
                   useful_match[i] = true;
-                  useful_match_position[i].push_back(position);
+                  useful_match_position[i].push_back(position);//! 放在这个position中找近似帧可以找到
                   useful_match_index[i].push_back(j);//! 这个position结果中的第j个
                 }
               }
@@ -1238,7 +1253,7 @@ void STDescManager::candidate_verify(
     int vote = 0;
     Eigen::Matrix3d test_rot;
     Eigen::Vector3d test_t;
-    triangle_solver(single_pair, test_t, test_rot);//! 三角形和三角形之间的icp匹配
+    triangle_solver(single_pair, test_t, test_rot);//! 3个点的p2p icp匹配
     for (size_t j = 0; j < candidate_matcher.match_list_.size(); j++) {
       auto verify_pair = candidate_matcher.match_list_[j];
       Eigen::Vector3d A = verify_pair.first.vertex_A_;
@@ -1256,7 +1271,7 @@ void STDescManager::candidate_verify(
       }
     }
     mylock.lock();
-    vote_list[i] = vote;//! 对第i个candidate的顶点icp匹配结果
+    vote_list[i] = vote;//! 对第i个candidate的顶点icp匹配结果投票
     mylock.unlock();
   }
   int max_vote_index = 0;
@@ -1293,7 +1308,7 @@ void STDescManager::candidate_verify(
     }
     verify_score = plane_geometric_verify(
         plane_cloud_vec_.back(),
-        plane_cloud_vec_[candidate_matcher.match_id_.second], relative_pose);//! 计算所有平面整体的匹配度
+        plane_cloud_vec_[candidate_matcher.match_id_.second], relative_pose);//! 计算所有平面整体的匹配度，只是确认，并未进一步优化位姿
   } else {
     verify_score = -1;
   }
@@ -1493,6 +1508,7 @@ void OctoTree::init_plane() {
   evalsReal.rowwise().sum().maxCoeff(&evalsMax);
   int evalsMid = 3 - evalsMin - evalsMax;
   if (evalsReal(evalsMin) < config_setting_.plane_detection_thre_) {//! jin:最小的足够小
+  // if (evalsReal(evalsMin) < config_setting_.plane_detection_thre_ && evalsReal(evalsMin) < 0.1 * evalsReal(evalsMid)) {//todo jin:按比例来计算
     plane_ptr_->normal_ << evecs.real()(0, evalsMin), evecs.real()(1, evalsMin),
         evecs.real()(2, evalsMin);//! jin：最小的特征向量
     plane_ptr_->min_eigen_value_ = evalsReal(evalsMin);
@@ -1501,7 +1517,7 @@ void OctoTree::init_plane() {
 
     plane_ptr_->intercept_ = -(plane_ptr_->normal_(0) * plane_ptr_->center_(0) +
                                plane_ptr_->normal_(1) * plane_ptr_->center_(1) +
-                               plane_ptr_->normal_(2) * plane_ptr_->center_(2));//! jin:点到面的距离
+                               plane_ptr_->normal_(2) * plane_ptr_->center_(2));//! jin:中心到原点在法线上的投影，点到面的距离
     plane_ptr_->p_center_.x = plane_ptr_->center_(0);
     plane_ptr_->p_center_.y = plane_ptr_->center_(1);
     plane_ptr_->p_center_.z = plane_ptr_->center_(2);

@@ -47,6 +47,8 @@ find_package(Ceres REQUIRED)
 message("Ceres libs: ${CERES_LIBRARIES}")
 find_package(GTSAM REQUIRED QUIET)
 
+find_package(Boost REQUIRED filesystem)
+
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
@@ -75,6 +77,14 @@ target_link_libraries(place_recognition_livox
         ${PCL_LIBRARIES} 
         ${OpenCV_LIBS} 
         ${CERES_LIBRARIES})
+
+add_executable(place_recognition_mid360 demo/place_recognition_mid360.cpp src/STDesc.cpp )
+target_link_libraries(place_recognition_mid360 
+        ${catkin_LIBRARIES} 
+        ${PCL_LIBRARIES} 
+        ${OpenCV_LIBS} 
+        ${CERES_LIBRARIES}
+        ${Boost_LIBRARIES})
 
 add_executable(pgo_demo demo/pgo_demo.cpp src/STDesc.cpp )
 target_link_libraries(pgo_demo 

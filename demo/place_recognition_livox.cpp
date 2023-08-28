@@ -112,10 +112,13 @@ int main(int argc, char **argv) {
         if (cloudInd % config_setting.sub_frame_num_ == 0 && cloudInd != 0) {
           std::cout << "Key Frame id:" << keyCloudInd
                     << ", cloud size: " << temp_cloud->size() << std::endl;
+          static Eigen::Vector3d last_trans = translation;
+          LOG(INFO) << "Diff: " << (translation - last_trans).norm();
           // step1. Descriptor Extraction
           auto t_descriptor_begin = std::chrono::high_resolution_clock::now();
           std::vector<STDesc> stds_vec;
           std_manager->GenerateSTDescs(temp_cloud, stds_vec);//todo 这个submap是怎么去绝对值的
+          LOG(INFO) << "descriptor size: " << stds_vec.size();
           auto t_descriptor_end = std::chrono::high_resolution_clock::now();
           descriptor_time.push_back(
               time_inc(t_descriptor_end, t_descriptor_begin));

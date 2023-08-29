@@ -293,7 +293,7 @@ int main(int argc, char **argv) {
             if(keyCloudInd > config_setting.skip_near_num_){
               if(tree.radiusSearch(pose_point, 20, indexs, dis) > 0){
                 for(int id : indexs){
-                  if (id < indexs.size() - config_setting.skip_near_num_){
+                  if (id < pose_tree.size() - config_setting.skip_near_num_){
                     true_loop_frames++;
                     if(search_result.first > 0 && (poses_vec[search_result.first].first - poses_vec[i].first).norm() < 20){
                       true_positive_recall++;
@@ -358,7 +358,7 @@ int main(int argc, char **argv) {
               if(keyCloudInd > config_setting.skip_near_num_){
                 if(tree.radiusSearch(pose_point, 20, indexs, dis) > 0){
                   for(int id : indexs){
-                    if (id < indexs.size() - config_setting.skip_near_num_){
+                    if (id < pose_tree.size() - config_setting.skip_near_num_){
                       true_loop_frames_tmp++;
                       if(search_result.first > 0 && (poses_vec[search_result.first].first - poses_vec[i].first).norm() < 20){
                         true_positive_recall_tmp++;

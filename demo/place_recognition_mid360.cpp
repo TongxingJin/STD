@@ -299,11 +299,6 @@ int main(int argc, char **argv) {
           down_sampling_voxel(*temp_cloud, config_setting.ds_size_);
           std::cout << "Key Frame id:" << keyCloudInd
                     << ", cloud size: " << temp_cloud->size() << std::endl;
-          // {// 点云拉平
-          //     double current_yaw = GetYaw(rotation);
-          //     pcl::common::transformPont
-
-          // }
           // step1. Descriptor Extraction
           auto t_descriptor_begin = std::chrono::high_resolution_clock::now();
           std::vector<STDesc> stds_vec;
@@ -370,22 +365,22 @@ int main(int argc, char **argv) {
             std::cout << "**************relocalization" << std::endl;
             pcl::PointCloud<pcl::PointXYZI>::Ptr tmp_cloud(new pcl::PointCloud<pcl::PointXYZI>);
             *tmp_cloud = *temp_cloud;
-            {// align to gravity
-              double current_yaw = GetYaw(rotation);
-              LOG(INFO) << "Yaw: " << current_yaw / M_PI * 180.0;
-              Eigen::Matrix3d tmp_rot = Eigen::AngleAxisd(current_yaw, Eigen::Vector3d::UnitZ()).matrix();
+            // {// align to gravity
+            //   double current_yaw = GetYaw(rotation);
+            //   LOG(INFO) << "Yaw: " << current_yaw / M_PI * 180.0;
+            //   Eigen::Matrix3d tmp_rot = Eigen::AngleAxisd(current_yaw, Eigen::Vector3d::UnitZ()).matrix();
               
-              for (size_t i = 0; i < tmp_cloud->size(); i++) {
-                Eigen::Vector3d pv = point2vec(tmp_cloud->points[i]);
-                pv = tmp_rot.inverse() * (pv - translation);
-                tmp_cloud->points[i] = vec2point(pv);
-              }
-            }
-            // for (size_t i = 0; i < tmp_cloud->size(); i++) {
-            //   Eigen::Vector3d pv = point2vec(tmp_cloud->points[i]);
-            //   pv = rotation.inverse() * (pv - translation);
-            //   tmp_cloud->points[i] = vec2point(pv);
+            //   for (size_t i = 0; i < tmp_cloud->size(); i++) {
+            //     Eigen::Vector3d pv = point2vec(tmp_cloud->points[i]);
+            //     pv = tmp_rot.inverse() * (pv - translation);
+            //     tmp_cloud->points[i] = vec2point(pv);
+            //   }
             // }
+            for (size_t i = 0; i < tmp_cloud->size(); i++) {
+              Eigen::Vector3d pv = point2vec(tmp_cloud->points[i]);
+              pv = rotation.inverse() * (pv - translation);
+              tmp_cloud->points[i] = vec2point(pv);
+            }
             std::vector<STDesc> stds_vec;
             std_manager->GenerateSTDescs(tmp_cloud, stds_vec);
             LOG(INFO) << "descriptor size: " << stds_vec.size();

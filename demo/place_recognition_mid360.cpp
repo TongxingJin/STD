@@ -156,6 +156,51 @@ void load_custom_pose_with_time(const std::string &pose_dir,
 
 }
 
+double GetYaw(const Eigen::Matrix3d& r) {
+  double ret = 0.0;
+  if (r(2, 0) < 1) {
+    if (r(2, 0) > -1) {
+      ret = std::atan2(r(1, 0), r(0, 0));
+    } else {
+      ret = -std::atan2(-r(1, 2), r(1, 1));
+    }
+  } else {
+    ret = std::atan2(-r(1, 2), r(1, 1));
+  }
+  return ret;
+}
+
+Eigen::Matrix3d GetHorizon(const Eigen::Matrix3d& r) {
+  Eigen::Vector3d ypr;
+
+  if (r(2, 0) < 1) {
+    if (r(2, 0) > -1) {
+      ypr.y() = std::asin(-r(2, 0));
+      ypr.x() = std::atan2(r(1, 0), r(0, 0));
+      ypr.z() = std::atan2(r(2, 1), r(2, 2));
+    } else {
+      ypr.y() = M_PI_2;
+      ypr.x() = -std::atan2(-r(1, 2), r(1, 1));
+      ypr.z() = 0.0;
+    }
+  } else {
+    ypr.y() = -M_PI_2;
+    ypr.x() = std::atan2(-r(1, 2), r(1, 1));
+    ypr.z() = 0.0;
+  }
+
+  return (Eigen::AngleAxisd((ypr.x()), Eigen::Vector3d::UnitZ())).toRotationMatrix();
+
+  // return ypr;
+}
+
+// Eigen::Matrix3d YPRAngles2Rotation(double yaw, double pitch,
+//                                               double roll) {
+//   return (Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()) *
+//       Eigen::AngleAxisd(pitch, Eigen::Vector3d::UnitY()) *
+//       Eigen::AngleAxisd(roll, Eigen::Vector3d::UnitX())).toRotationMatrix();
+// }
+
 int main(int argc, char **argv) {
   ros::init(argc, argv, "demo_kitti");
   ros::NodeHandle nh;
@@ -234,6 +279,7 @@ int main(int argc, char **argv) {
         pcl::io::loadPCDFile(dir_path + "/" + tag_vec[i] + ".pcd", cloud);
         Eigen::Vector3d translation = poses_vec[i].first;
         Eigen::Matrix3d rotation = poses_vec[i].second;
+        
         for (size_t i = 0; i < cloud.size(); i++) {
           Eigen::Vector3d pv = point2vec(cloud.points[i]);
           pv = rotation * pv + translation;
@@ -253,6 +299,11 @@ int main(int argc, char **argv) {
           down_sampling_voxel(*temp_cloud, config_setting.ds_size_);
           std::cout << "Key Frame id:" << keyCloudInd
                     << ", cloud size: " << temp_cloud->size() << std::endl;
+          // {// 点云拉平
+          //     double current_yaw = GetYaw(rotation);
+          //     pcl::common::transformPont
+
+          // }
           // step1. Descriptor Extraction
           auto t_descriptor_begin = std::chrono::high_resolution_clock::now();
           std::vector<STDesc> stds_vec;
@@ -319,11 +370,22 @@ int main(int argc, char **argv) {
             std::cout << "**************relocalization" << std::endl;
             pcl::PointCloud<pcl::PointXYZI>::Ptr tmp_cloud(new pcl::PointCloud<pcl::PointXYZI>);
             *tmp_cloud = *temp_cloud;
-            for (size_t i = 0; i < tmp_cloud->size(); i++) {
-              Eigen::Vector3d pv = point2vec(tmp_cloud->points[i]);
-              pv = rotation.inverse() * (pv - translation);
-              tmp_cloud->points[i] = vec2point(pv);
+            {// align to gravity
+              double current_yaw = GetYaw(rotation);
+              LOG(INFO) << "Yaw: " << current_yaw / M_PI * 180.0;
+              Eigen::Matrix3d tmp_rot = Eigen::AngleAxisd(current_yaw, Eigen::Vector3d::UnitZ()).matrix();
+              
+              for (size_t i = 0; i < tmp_cloud->size(); i++) {
+                Eigen::Vector3d pv = point2vec(tmp_cloud->points[i]);
+                pv = tmp_rot.inverse() * (pv - translation);
+                tmp_cloud->points[i] = vec2point(pv);
+              }
             }
+            // for (size_t i = 0; i < tmp_cloud->size(); i++) {
+            //   Eigen::Vector3d pv = point2vec(tmp_cloud->points[i]);
+            //   pv = rotation.inverse() * (pv - translation);
+            //   tmp_cloud->points[i] = vec2point(pv);
+            // }
             std::vector<STDesc> stds_vec;
             std_manager->GenerateSTDescs(tmp_cloud, stds_vec);
             LOG(INFO) << "descriptor size: " << stds_vec.size();

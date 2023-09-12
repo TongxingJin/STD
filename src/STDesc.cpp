@@ -316,6 +316,22 @@ void publish_std_pairs(
   ma_line.markers.clear();
 }
 
+std::vector<std::string> split_line(const std::string& s, const std::string& delimiter){
+  int left = 0;
+  int right = 0;
+  std::vector<std::string> result;
+  while((right = s.find(delimiter, left)) != std::string::npos){
+    if(left != right){
+      result.emplace_back(s.substr(left, right - left));
+    }
+    left = right + delimiter.size();
+  }
+  if(left != s.size()){
+    result.emplace_back(s.substr(left));
+  }
+  return result;
+}
+
 void STDescManager::GenerateSTDescs(
     pcl::PointCloud<pcl::PointXYZI>::Ptr &input_cloud,
     std::vector<STDesc> &stds_vec) {
@@ -380,8 +396,10 @@ void STDescManager::SearchLoop(
     double verify_score = -1;
     std::pair<Eigen::Vector3d, Eigen::Matrix3d> relative_pose;
     std::vector<std::pair<STDesc, STDesc>> sucess_match_vec;
+    // LOG(INFO) << "Before candidate_verify";
     candidate_verify(candidate_matcher_vec[i], verify_score, relative_pose,
                      sucess_match_vec);//! 顶点到顶点的icp+RANSAC计算位姿，面与面的匹配进行check
+    // LOG(INFO) << "After candidate_verify";
     if (verify_score > best_score) {//! 一定比例的面符合这个T，只保留几何确认得分最高的
       best_score = verify_score;
       best_candidate_id = candidate_matcher_vec[i].match_id_.second;
@@ -429,6 +447,62 @@ void STDescManager::AddSTDescs(const std::vector<STDesc> &stds_vec) {
     }
   }
   return;
+}
+
+void STDescManager::WriteIntoFile(std::string file_path, const std::vector<STDesc> &stds_vec){
+  std::ofstream of(file_path + ".txt", std::ios::out);
+  for (const STDesc& single_std : stds_vec) {
+    of << single_std.side_length_(0) << " " << single_std.side_length_(1) << " " << single_std.side_length_(2) << " " <<
+          single_std.angle_(0) << " " << single_std.angle_(1) << " " << single_std.angle_(2) << " " <<
+          single_std.center_(0) << " " << single_std.center_(1) << " " << single_std.center_(2) << " " << 
+          single_std.frame_id_ << " " <<
+          single_std.vertex_A_(0) << " " << single_std.vertex_A_(1) << " " << single_std.vertex_A_(2) << " " <<
+          single_std.vertex_B_(0) << " " << single_std.vertex_B_(1) << " " << single_std.vertex_B_(2) << " " <<
+          single_std.vertex_C_(0) << " " << single_std.vertex_C_(1) << " " << single_std.vertex_C_(2) << " " <<
+          single_std.vertex_attached_(0) << " " << single_std.vertex_attached_(1) << " " << single_std.vertex_attached_(2) << "\n";
+  }
+  of.close();
+  pcl::io::savePCDFileBinaryCompressed<pcl::PointXYZINormal>(file_path + ".pcd", *(plane_cloud_vec_.back()));
+}
+
+void STDescManager::LoadFromFile(std::string file_path){
+  std::ifstream file(file_path + ".txt");
+  std::string line;
+  while(getline(file, line)){
+    std::vector<std::string> segments;
+    segments = split_line(line, " ");
+    STDesc single_std;
+    single_std.side_length_ << std::stod(segments[0]), std::stod(segments[1]), std::stod(segments[2]);
+    single_std.angle_ << std::stod(segments[3]), std::stod(segments[4]), std::stod(segments[5]);
+    single_std.center_ << std::stod(segments[6]), std::stod(segments[7]), std::stod(segments[8]);
+    single_std.frame_id_ = std::stoi(segments[9]);
+    single_std.vertex_A_ << std::stod(segments[10]), std::stod(segments[11]), std::stod(segments[12]);
+    single_std.vertex_B_ << std::stod(segments[13]), std::stod(segments[14]), std::stod(segments[15]);
+    single_std.vertex_C_ << std::stod(segments[16]), std::stod(segments[17]), std::stod(segments[18]);
+    single_std.vertex_attached_ << std::stod(segments[19]), std::stod(segments[20]), std::stod(segments[21]);
+
+    // calculate the position of single std
+    STDesc_LOC position;
+    position.x = (int)(single_std.side_length_[0] + 0.5);//! 边长是以0.2m为单位的
+    position.y = (int)(single_std.side_length_[1] + 0.5);
+    position.z = (int)(single_std.side_length_[2] + 0.5);
+    position.a = (int)(single_std.angle_[0]);
+    position.b = (int)(single_std.angle_[1]);
+    position.c = (int)(single_std.angle_[2]);
+    auto iter = data_base_.find(position);
+    if (iter != data_base_.end()) {
+      data_base_[position].push_back(single_std);
+    } else {
+      std::vector<STDesc> descriptor_vec;
+      descriptor_vec.push_back(single_std);
+      data_base_[position] = descriptor_vec;
+    }
+  }
+
+  pcl::PointCloud<pcl::PointXYZINormal>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZINormal>);
+  pcl::io::loadPCDFile(file_path + ".pcd", *cloud);
+  plane_cloud_vec_.push_back(cloud);
+  
 }
 
 void STDescManager::init_voxel_map(
@@ -1262,7 +1336,7 @@ void STDescManager::candidate_verify(
       Eigen::Vector3d B_transform = test_rot * B + test_t;
       Eigen::Vector3d C = verify_pair.first.vertex_C_;
       Eigen::Vector3d C_transform = test_rot * C + test_t;
-      double dis_A = (A_transform - verify_pair.second.vertex_A_).norm();
+      double dis_A = (A_transform - verify_pair.second.vertex_A_).norm();//! 对当前帧做这种变换
       double dis_B = (B_transform - verify_pair.second.vertex_B_).norm();
       double dis_C = (C_transform - verify_pair.second.vertex_C_).norm();
       if (dis_A < dis_threshold && dis_B < dis_threshold &&

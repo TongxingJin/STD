@@ -9,6 +9,7 @@
 #include <fstream>
 #include <mutex>
 #include <pcl/common/io.h>
+#include <pcl/io/pcd_io.h>
 #include <pcl/kdtree/kdtree_flann.h>
 #include <ros/ros.h>
 #include <sstream>
@@ -264,6 +265,8 @@ struct PlaneSolver {
   Eigen::Vector3d target_normal;
 };
 
+std::vector<std::string> split_line(const std::string& s, const std::string& delimiter);
+
 class STDescManager {
 public:
   STDescManager() = default;
@@ -313,6 +316,10 @@ public:
     plane_cloud_vec_.pop_back();
     corner_cloud_vec_.pop_back();
   }
+
+  void WriteIntoFile(std::string file_path, const std::vector<STDesc> &stds_vec);
+
+  void LoadFromFile(std::string file_path);
 
 private:
   /*Following are sub-processing functions*/

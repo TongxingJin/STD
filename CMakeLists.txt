@@ -86,6 +86,14 @@ target_link_libraries(place_recognition_mid360
         ${CERES_LIBRARIES}
         ${Boost_LIBRARIES})
 
+add_executable(relocalization demo/relocalization.cpp src/STDesc.cpp )
+target_link_libraries(relocalization 
+        ${catkin_LIBRARIES} 
+        ${PCL_LIBRARIES} 
+        ${OpenCV_LIBS} 
+        ${CERES_LIBRARIES}
+        ${Boost_LIBRARIES})
+
 add_executable(pgo_demo demo/pgo_demo.cpp src/STDesc.cpp )
 target_link_libraries(pgo_demo 
         ${catkin_LIBRARIES} 

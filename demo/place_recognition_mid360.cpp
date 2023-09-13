@@ -271,7 +271,7 @@ int main(int argc, char **argv) {
     // }
     pcl::KdTreeFLANN<pcl::PointXYZ> tree;
     // tree.setInputCloud(pose_tree.makeShared());
-    FixSizeCloudDeque queue(10);
+    FixSizeCloudDeque queue(100);
 
     BOOST_FOREACH (int i, pcd_index) {//! view里的每个m。遍历，并非多线程！
         double laser_time = times_vec[i];
@@ -296,6 +296,11 @@ int main(int argc, char **argv) {
           for(const auto& cloud : queue.clouds){
             *temp_cloud += cloud;
           }
+          for (size_t i = 0; i < temp_cloud->size(); i++) {
+              Eigen::Vector3d pv = point2vec(temp_cloud->points[i]);
+              pv = rotation.inverse() * (pv - translation);
+              temp_cloud->points[i] = vec2point(pv);
+            }
           down_sampling_voxel(*temp_cloud, config_setting.ds_size_);
           std::cout << "Key Frame id:" << keyCloudInd
                     << ", cloud size: " << temp_cloud->size() << std::endl;
@@ -307,136 +312,136 @@ int main(int argc, char **argv) {
           auto t_descriptor_end = std::chrono::high_resolution_clock::now();
           descriptor_time.push_back(
               time_inc(t_descriptor_end, t_descriptor_begin));
-          // step2. Searching Loop
-          auto t_query_begin = std::chrono::high_resolution_clock::now();
-          std::pair<int, double> search_result(-1, 0);
-          std::pair<Eigen::Vector3d, Eigen::Matrix3d> loop_transform;
-          loop_transform.first << 0, 0, 0;
-          loop_transform.second = Eigen::Matrix3d::Identity();
-          std::vector<std::pair<STDesc, STDesc>> loop_std_pair;
-          if (keyCloudInd > config_setting.skip_near_num_) {//! 最开始数据库低于50的时候不找？
-            std_manager->SearchLoop(stds_vec, search_result, loop_transform,
-                                    loop_std_pair);
-          }
-          if (search_result.first > 0) {
-            std::cout << "[Loop Detection] triggle loop: " << keyCloudInd
-                      << "--" << search_result.first
-                      << ", score:" << search_result.second << std::endl;
-          }else{
-            LOG(INFO) << "No loop is found!";
-          }
-          auto t_query_end = std::chrono::high_resolution_clock::now();
-          querying_time.push_back(time_inc(t_query_end, t_query_begin));
+          // // step2. Searching Loop
+          // auto t_query_begin = std::chrono::high_resolution_clock::now();
+          // std::pair<int, double> search_result(-1, 0);
+          // std::pair<Eigen::Vector3d, Eigen::Matrix3d> loop_transform;
+          // loop_transform.first << 0, 0, 0;
+          // loop_transform.second = Eigen::Matrix3d::Identity();
+          // std::vector<std::pair<STDesc, STDesc>> loop_std_pair;
+          // if (keyCloudInd > config_setting.skip_near_num_) {//! 最开始数据库低于50的时候不找？
+          //   std_manager->SearchLoop(stds_vec, search_result, loop_transform,
+          //                           loop_std_pair);
+          // }
+          // if (search_result.first > 0) {
+          //   std::cout << "[Loop Detection] triggle loop: " << keyCloudInd
+          //             << "--" << search_result.first
+          //             << ", score:" << search_result.second << std::endl;
+          // }else{
+          //   LOG(INFO) << "No loop is found!";
+          // }
+          // auto t_query_end = std::chrono::high_resolution_clock::now();
+          // querying_time.push_back(time_inc(t_query_end, t_query_begin));
 
-          //! debug
-          {
-            std::vector<int> indexs;
-            std::vector<float> dis;
-            pcl::PointXYZ pose_point;
-            pose_point.x = translation.x();
-            pose_point.y = translation.y();
-            pose_point.z = translation.z();
-            if(keyCloudInd > config_setting.skip_near_num_){
-              if(tree.radiusSearch(pose_point, 20, indexs, dis) > 0){
-                for(int id : indexs){
-                  if (id < pose_tree.size() - config_setting.skip_near_num_){
-                    true_loop_frames++;
-                    if(search_result.first > 0 && (poses_vec[search_result.first].first - poses_vec[i].first).norm() < 20){
-                      true_positive_recall++;
-                    }
-                    break;
-                  }
-                }
+          // //! debug
+          // {
+          //   std::vector<int> indexs;
+          //   std::vector<float> dis;
+          //   pcl::PointXYZ pose_point;
+          //   pose_point.x = translation.x();
+          //   pose_point.y = translation.y();
+          //   pose_point.z = translation.z();
+          //   if(keyCloudInd > config_setting.skip_near_num_){
+          //     if(tree.radiusSearch(pose_point, 20, indexs, dis) > 0){
+          //       for(int id : indexs){
+          //         if (id < pose_tree.size() - config_setting.skip_near_num_){
+          //           true_loop_frames++;
+          //           if(search_result.first > 0 && (poses_vec[search_result.first].first - poses_vec[i].first).norm() < 20){
+          //             true_positive_recall++;
+          //           }
+          //           break;
+          //         }
+          //       }
                 
-              }
-              if(search_result.first > 0){
-                true_in_reality++;
-                if((poses_vec[search_result.first].first - poses_vec[i].first).norm() < 20){
-                  true_positive_precision++;
-                }
-              }
-            }
-          }
+          //     }
+          //     if(search_result.first > 0){
+          //       true_in_reality++;
+          //       if((poses_vec[search_result.first].first - poses_vec[i].first).norm() < 20){
+          //         true_positive_precision++;
+          //       }
+          //     }
+          //   }
+          // }
 
-          bool relocalization = false;
-          if(relocalization){
-            // start of relocalization, transform cloud back into current pose
-            // step1. Descriptor Extraction
-            std::cout << "**************relocalization" << std::endl;
-            pcl::PointCloud<pcl::PointXYZI>::Ptr tmp_cloud(new pcl::PointCloud<pcl::PointXYZI>);
-            *tmp_cloud = *temp_cloud;
-            // {// align to gravity
-            //   double current_yaw = GetYaw(rotation);
-            //   LOG(INFO) << "Yaw: " << current_yaw / M_PI * 180.0;
-            //   Eigen::Matrix3d tmp_rot = Eigen::AngleAxisd(current_yaw, Eigen::Vector3d::UnitZ()).matrix();
+          // bool relocalization = false;
+          // if(relocalization){
+          //   // start of relocalization, transform cloud back into current pose
+          //   // step1. Descriptor Extraction
+          //   std::cout << "**************relocalization" << std::endl;
+          //   pcl::PointCloud<pcl::PointXYZI>::Ptr tmp_cloud(new pcl::PointCloud<pcl::PointXYZI>);
+          //   *tmp_cloud = *temp_cloud;
+          //   // {// align to gravity
+          //   //   double current_yaw = GetYaw(rotation);
+          //   //   LOG(INFO) << "Yaw: " << current_yaw / M_PI * 180.0;
+          //   //   Eigen::Matrix3d tmp_rot = Eigen::AngleAxisd(current_yaw, Eigen::Vector3d::UnitZ()).matrix();
               
-            //   for (size_t i = 0; i < tmp_cloud->size(); i++) {
-            //     Eigen::Vector3d pv = point2vec(tmp_cloud->points[i]);
-            //     pv = tmp_rot.inverse() * (pv - translation);
-            //     tmp_cloud->points[i] = vec2point(pv);
-            //   }
-            // }
-            for (size_t i = 0; i < tmp_cloud->size(); i++) {
-              Eigen::Vector3d pv = point2vec(tmp_cloud->points[i]);
-              pv = rotation.inverse() * (pv - translation);
-              tmp_cloud->points[i] = vec2point(pv);
-            }
-            std::vector<STDesc> stds_vec;
-            std_manager->GenerateSTDescs(tmp_cloud, stds_vec);
-            LOG(INFO) << "descriptor size: " << stds_vec.size();
-            std_manager->ClearTmp();// Recover the change to member variables caused by GenerateSTDescs
+          //   //   for (size_t i = 0; i < tmp_cloud->size(); i++) {
+          //   //     Eigen::Vector3d pv = point2vec(tmp_cloud->points[i]);
+          //   //     pv = tmp_rot.inverse() * (pv - translation);
+          //   //     tmp_cloud->points[i] = vec2point(pv);
+          //   //   }
+          //   // }
+          //   for (size_t i = 0; i < tmp_cloud->size(); i++) {
+          //     Eigen::Vector3d pv = point2vec(tmp_cloud->points[i]);
+          //     pv = rotation.inverse() * (pv - translation);
+          //     tmp_cloud->points[i] = vec2point(pv);
+          //   }
+          //   std::vector<STDesc> stds_vec;
+          //   std_manager->GenerateSTDescs(tmp_cloud, stds_vec);
+          //   LOG(INFO) << "descriptor size: " << stds_vec.size();
+          //   std_manager->ClearTmp();// Recover the change to member variables caused by GenerateSTDescs
 
-            // step2. Searching Loop
-            std::pair<int, double> search_result(-1, 0);
-            std::pair<Eigen::Vector3d, Eigen::Matrix3d> loop_transform;
-            loop_transform.first << 0, 0, 0;
-            loop_transform.second = Eigen::Matrix3d::Identity();
-            std::vector<std::pair<STDesc, STDesc>> loop_std_pair;
-            if (keyCloudInd > config_setting.skip_near_num_) {
-              std_manager->SearchLoop(stds_vec, search_result, loop_transform,
-                                      loop_std_pair);
-            }
-            if (search_result.first > 0) {
-              std::cout << "[Loop Detection] triggle loop: " << keyCloudInd
-                        << "--" << search_result.first
-                        << ", score:" << search_result.second << std::endl;
-            }else{
-              LOG(INFO) << "No loop is found!";
-            }
+          //   // step2. Searching Loop
+          //   std::pair<int, double> search_result(-1, 0);
+          //   std::pair<Eigen::Vector3d, Eigen::Matrix3d> loop_transform;
+          //   loop_transform.first << 0, 0, 0;
+          //   loop_transform.second = Eigen::Matrix3d::Identity();
+          //   std::vector<std::pair<STDesc, STDesc>> loop_std_pair;
+          //   if (keyCloudInd > config_setting.skip_near_num_) {
+          //     std_manager->SearchLoop(stds_vec, search_result, loop_transform,
+          //                             loop_std_pair);
+          //   }
+          //   if (search_result.first > 0) {
+          //     std::cout << "[Loop Detection] triggle loop: " << keyCloudInd
+          //               << "--" << search_result.first
+          //               << ", score:" << search_result.second << std::endl;
+          //   }else{
+          //     LOG(INFO) << "No loop is found!";
+          //   }
 
-            //! debug
-            {
-              std::vector<int> indexs;
-              std::vector<float> dis;
-              pcl::PointXYZ pose_point;
-              pose_point.x = translation.x();
-              pose_point.y = translation.y();
-              pose_point.z = translation.z();
-              if(keyCloudInd > config_setting.skip_near_num_){
-                if(tree.radiusSearch(pose_point, 20, indexs, dis) > 0){
-                  for(int id : indexs){
-                    if (id < pose_tree.size() - config_setting.skip_near_num_){
-                      true_loop_frames_tmp++;
-                      if(search_result.first > 0 && (poses_vec[search_result.first].first - poses_vec[i].first).norm() < 20){
-                        true_positive_recall_tmp++;
-                      }
-                      break;
-                    }
-                  }
-                }
-                if(search_result.first > 0){
-                  true_in_reality_tmp++;
-                  if((poses_vec[search_result.first].first - poses_vec[i].first).norm() < 20){
-                    true_positive_precision_tmp++;
-                  }
-                }
-              }
-            }
-            std::cout << "end of relocalization**************" << std::endl;
-          }// end of relocalization
+          //   //! debug
+          //   {
+          //     std::vector<int> indexs;
+          //     std::vector<float> dis;
+          //     pcl::PointXYZ pose_point;
+          //     pose_point.x = translation.x();
+          //     pose_point.y = translation.y();
+          //     pose_point.z = translation.z();
+          //     if(keyCloudInd > config_setting.skip_near_num_){
+          //       if(tree.radiusSearch(pose_point, 20, indexs, dis) > 0){
+          //         for(int id : indexs){
+          //           if (id < pose_tree.size() - config_setting.skip_near_num_){
+          //             true_loop_frames_tmp++;
+          //             if(search_result.first > 0 && (poses_vec[search_result.first].first - poses_vec[i].first).norm() < 20){
+          //               true_positive_recall_tmp++;
+          //             }
+          //             break;
+          //           }
+          //         }
+          //       }
+          //       if(search_result.first > 0){
+          //         true_in_reality_tmp++;
+          //         if((poses_vec[search_result.first].first - poses_vec[i].first).norm() < 20){
+          //           true_positive_precision_tmp++;
+          //         }
+          //       }
+          //     }
+          //   }
+          //   std::cout << "end of relocalization**************" << std::endl;
+          // }// end of relocalization
 
           // step3. Add descriptors to the database
-          auto t_map_update_begin = std::chrono::high_resolution_clock::now();
+          // auto t_map_update_begin = std::chrono::high_resolution_clock::now();
           // // todo: save std desciptors
           // std::ofstream of(dir_path + "/../stds/" + std::to_string(stds_vec.front().frame_id_) + ".txt", std::ios::out);
           // for (auto single_std : stds_vec) {
@@ -457,81 +462,81 @@ int main(int argc, char **argv) {
           filesystem::create_directories(dir_path + "/../stds/ori_clouds/");
           pcl::io::savePCDFileBinaryCompressed(dir_path + "/../stds/ori_clouds/" + std::to_string(stds_vec.front().frame_id_) + ".pcd", *temp_cloud);
           std_manager->AddSTDescs(stds_vec);
-          auto t_map_update_end = std::chrono::high_resolution_clock::now();
-          update_time.push_back(time_inc(t_map_update_end, t_map_update_begin));
-          std::cout << "[Time] descriptor extraction: "
-                    << time_inc(t_descriptor_end, t_descriptor_begin) << "ms, "
-                    << "query: " << time_inc(t_query_end, t_query_begin)
-                    << "ms, "
-                    << "update map:"
-                    << time_inc(t_map_update_end, t_map_update_begin) << "ms"
-                    << std::endl;
+          // auto t_map_update_end = std::chrono::high_resolution_clock::now();
+          // update_time.push_back(time_inc(t_map_update_end, t_map_update_begin));
+          // std::cout << "[Time] descriptor extraction: "
+          //           << time_inc(t_descriptor_end, t_descriptor_begin) << "ms, "
+          //           << "query: " << time_inc(t_query_end, t_query_begin)
+          //           << "ms, "
+          //           << "update map:"
+          //           << time_inc(t_map_update_end, t_map_update_begin) << "ms"
+          //           << std::endl;
 
-          pcl::PointCloud<pcl::PointXYZI> save_key_cloud;
-          save_key_cloud = *temp_cloud;
+          // pcl::PointCloud<pcl::PointXYZI> save_key_cloud;
+          // save_key_cloud = *temp_cloud;
 
-          std_manager->key_cloud_vec_.push_back(save_key_cloud.makeShared());
+          // std_manager->key_cloud_vec_.push_back(save_key_cloud.makeShared());
 
-          // publish
+          // // publish
 
-          sensor_msgs::PointCloud2 pub_cloud;
-          pcl::toROSMsg(*temp_cloud, pub_cloud);
-          pub_cloud.header.frame_id = "camera_init";
-          pub_cloud.header.stamp = ros::Time::now();
-          pubCureentCloud.publish(pub_cloud);//! 发布当前submap
-          pcl::toROSMsg(*std_manager->corner_cloud_vec_.back(), pub_cloud);
-          pub_cloud.header.frame_id = "camera_init";
-          pub_cloud.header.stamp = ros::Time::now();
-          pubCurrentCorner.publish(pub_cloud);//! 发布当前submap的特征点
+          // sensor_msgs::PointCloud2 pub_cloud;
+          // pcl::toROSMsg(*temp_cloud, pub_cloud);
+          // pub_cloud.header.frame_id = "camera_init";
+          // pub_cloud.header.stamp = ros::Time::now();
+          // pubCureentCloud.publish(pub_cloud);//! 发布当前submap
+          // pcl::toROSMsg(*std_manager->corner_cloud_vec_.back(), pub_cloud);
+          // pub_cloud.header.frame_id = "camera_init";
+          // pub_cloud.header.stamp = ros::Time::now();
+          // pubCurrentCorner.publish(pub_cloud);//! 发布当前submap的特征点
 
-          if (search_result.first > 0) {
-            triggle_loop_num++;
-            pcl::toROSMsg(*std_manager->key_cloud_vec_[search_result.first],
-                          pub_cloud);
-            pub_cloud.header.frame_id = "camera_init";
-            pub_cloud.header.stamp = ros::Time::now();
-            pubMatchedCloud.publish(pub_cloud);
-            slow_loop.sleep();//! 发布有一定的时间滞后
-            pcl::toROSMsg(*std_manager->corner_cloud_vec_[search_result.first],
-                          pub_cloud);
-            pub_cloud.header.frame_id = "camera_init";
-            pub_cloud.header.stamp = ros::Time::now();
-            pubMatchedCorner.publish(pub_cloud);
-            // publish_std_pairs(loop_std_pair, pubSTD);
-            // slow_loop.sleep();
-            // getchar();
-          }else{
-            sensor_msgs::PointCloud2 empty_cloud;
-            empty_cloud.header.frame_id = "camera_init";
-            empty_cloud.header.stamp = ros::Time::now();
-            pubMatchedCloud.publish(empty_cloud);
-            pubMatchedCorner.publish(empty_cloud);
-          }
-          publish_std_pairs(loop_std_pair, pubSTD);//! 清除旧的
-          slow_loop.sleep();
+          // if (search_result.first > 0) {
+          //   triggle_loop_num++;
+          //   pcl::toROSMsg(*std_manager->key_cloud_vec_[search_result.first],
+          //                 pub_cloud);
+          //   pub_cloud.header.frame_id = "camera_init";
+          //   pub_cloud.header.stamp = ros::Time::now();
+          //   pubMatchedCloud.publish(pub_cloud);
+          //   slow_loop.sleep();//! 发布有一定的时间滞后
+          //   pcl::toROSMsg(*std_manager->corner_cloud_vec_[search_result.first],
+          //                 pub_cloud);
+          //   pub_cloud.header.frame_id = "camera_init";
+          //   pub_cloud.header.stamp = ros::Time::now();
+          //   pubMatchedCorner.publish(pub_cloud);
+          //   // publish_std_pairs(loop_std_pair, pubSTD);
+          //   // slow_loop.sleep();
+          //   // getchar();
+          // }else{
+          //   sensor_msgs::PointCloud2 empty_cloud;
+          //   empty_cloud.header.frame_id = "camera_init";
+          //   empty_cloud.header.stamp = ros::Time::now();
+          //   pubMatchedCloud.publish(empty_cloud);
+          //   pubMatchedCorner.publish(empty_cloud);
+          // }
+          // publish_std_pairs(loop_std_pair, pubSTD);//! 清除旧的
+          // slow_loop.sleep();
 
 
         // }
-          nav_msgs::Odometry odom;
-          odom.header.frame_id = "camera_init";
-          odom.header.stamp = ros::Time::now();
-          odom.pose.pose.position.x = translation[0];
-          odom.pose.pose.position.y = translation[1];
-          odom.pose.pose.position.z = translation[2];
-          Eigen::Quaterniond q(rotation);
-          odom.pose.pose.orientation.w = q.w();
-          odom.pose.pose.orientation.x = q.x();
-          odom.pose.pose.orientation.y = q.y();
-          odom.pose.pose.orientation.z = q.z();
-          pubOdomAftMapped.publish(odom);//! 所有帧都发布odo
-          loop.sleep();
+          // nav_msgs::Odometry odom;
+          // odom.header.frame_id = "camera_init";
+          // odom.header.stamp = ros::Time::now();
+          // odom.pose.pose.position.x = translation[0];
+          // odom.pose.pose.position.y = translation[1];
+          // odom.pose.pose.position.z = translation[2];
+          // Eigen::Quaterniond q(rotation);
+          // odom.pose.pose.orientation.w = q.w();
+          // odom.pose.pose.orientation.x = q.x();
+          // odom.pose.pose.orientation.y = q.y();
+          // odom.pose.pose.orientation.z = q.z();
+          // pubOdomAftMapped.publish(odom);//! 所有帧都发布odo
+          // loop.sleep();
 
-          pcl::PointXYZ pose_point;
-          pose_point.x = translation.x();
-          pose_point.y = translation.y();
-          pose_point.z = translation.z();
-          pose_tree.push_back(pose_point);   
-          tree.setInputCloud(pose_tree.makeShared());
+          // pcl::PointXYZ pose_point;
+          // pose_point.x = translation.x();
+          // pose_point.y = translation.y();
+          // pose_point.z = translation.z();
+          // pose_tree.push_back(pose_point);   
+          // tree.setInputCloud(pose_tree.makeShared());
           // usleep(5e4);//5e4
 
 
@@ -543,27 +548,27 @@ int main(int argc, char **argv) {
         }
         cloudInd++;
     }
-    double mean_descriptor_time =
-        std::accumulate(descriptor_time.begin(), descriptor_time.end(), 0) *
-        1.0 / descriptor_time.size();
-    double mean_query_time =
-        std::accumulate(querying_time.begin(), querying_time.end(), 0) * 1.0 /
-        querying_time.size();
-    double mean_update_time =
-        std::accumulate(update_time.begin(), update_time.end(), 0) * 1.0 /
-        update_time.size();
-    std::cout << "Total key frame number:" << keyCloudInd
-              << ", loop number:" << triggle_loop_num << std::endl;
-    std::cout << "Mean time for descriptor extraction: " << mean_descriptor_time
-              << "ms, query: " << mean_query_time
-              << "ms, update: " << mean_update_time << "ms, total: "
-              << mean_descriptor_time + mean_query_time + mean_update_time
-              << "ms" << std::endl;
-    LOG(INFO) << true_positive_recall << "/" << true_loop_frames << " = Recall rate: " << float(true_positive_recall) / true_loop_frames;
-    LOG(INFO) << true_positive_precision << "/" << true_in_reality << " = Precision rate: " << float(true_positive_precision) / true_in_reality;
+    // double mean_descriptor_time =
+    //     std::accumulate(descriptor_time.begin(), descriptor_time.end(), 0) *
+    //     1.0 / descriptor_time.size();
+    // double mean_query_time =
+    //     std::accumulate(querying_time.begin(), querying_time.end(), 0) * 1.0 /
+    //     querying_time.size();
+    // double mean_update_time =
+    //     std::accumulate(update_time.begin(), update_time.end(), 0) * 1.0 /
+    //     update_time.size();
+    // std::cout << "Total key frame number:" << keyCloudInd
+    //           << ", loop number:" << triggle_loop_num << std::endl;
+    // std::cout << "Mean time for descriptor extraction: " << mean_descriptor_time
+    //           << "ms, query: " << mean_query_time
+    //           << "ms, update: " << mean_update_time << "ms, total: "
+    //           << mean_descriptor_time + mean_query_time + mean_update_time
+    //           << "ms" << std::endl;
+    // LOG(INFO) << true_positive_recall << "/" << true_loop_frames << " = Recall rate: " << float(true_positive_recall) / true_loop_frames;
+    // LOG(INFO) << true_positive_precision << "/" << true_in_reality << " = Precision rate: " << float(true_positive_precision) / true_in_reality;
 
-    LOG(INFO) << true_positive_recall_tmp << "/" << true_loop_frames_tmp << " = Recall rate: " << float(true_positive_recall_tmp) / true_loop_frames_tmp;
-    LOG(INFO) << true_positive_precision_tmp << "/" << true_in_reality_tmp << " = Precision rate: " << float(true_positive_precision_tmp) / true_in_reality_tmp;
+    // LOG(INFO) << true_positive_recall_tmp << "/" << true_loop_frames_tmp << " = Recall rate: " << float(true_positive_recall_tmp) / true_loop_frames_tmp;
+    // LOG(INFO) << true_positive_precision_tmp << "/" << true_in_reality_tmp << " = Precision rate: " << float(true_positive_precision_tmp) / true_in_reality_tmp;
     break;
   }
 

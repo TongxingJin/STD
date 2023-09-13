@@ -22,7 +22,7 @@ std_side_resolution: 0.2 #离散化的时候的分辨率
 # candidate search
 skip_near_num: 3 #最近一定帧数不找回环
 candidate_num: 50
-sub_frame_num: 1
+sub_frame_num: 10
 vertex_diff_threshold: 0.8 #对比描述子相似性的参数
 rough_dis_threshold: 0.05 #允许三角形周长误差的比例
 normal_threshold: 0.3

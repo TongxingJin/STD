@@ -250,75 +250,77 @@ int main(int argc, char **argv) {
   }
   LOG(INFO) << "Database size: " << std_manager->data_base_.size();
 
-  std::vector<std::string> tag_vec;
-  std::vector<std::pair<Eigen::Vector3d, Eigen::Matrix3d>> poses_vec;
-  std::vector<double> times_vec;
-  load_custom_pose_with_time(dir_path, tag_vec, poses_vec, times_vec);//! 读取时间戳和位姿到vector
-  std::vector<int> pcd_index(times_vec.size());
-  for(int index = 0; index < times_vec.size(); ++index){
-    pcd_index[index] = index;
-  }
-  std::cout << "Sucessfully load pose with number: " << poses_vec.size()
-            << std::endl;
+  // std::vector<std::string> tag_vec;
+  // std::vector<std::pair<Eigen::Vector3d, Eigen::Matrix3d>> poses_vec;
+  // std::vector<double> times_vec;
+  // load_custom_pose_with_time(dir_path, tag_vec, poses_vec, times_vec);//! 读取时间戳和位姿到vector
+  // std::vector<int> pcd_index(times_vec.size());
+  // for(int index = 0; index < times_vec.size(); ++index){
+  //   pcd_index[index] = index;
+  // }
+  // std::cout << "Sucessfully load pose with number: " << poses_vec.size()
+  //           << std::endl;
 
-  size_t cloudInd = 0;
-  size_t keyCloudInd = 0;
+  // size_t cloudInd = 0;
+  // size_t keyCloudInd = 0;
   pcl::PointCloud<pcl::PointXYZI>::Ptr temp_cloud(
       new pcl::PointCloud<pcl::PointXYZI>());
 
   std::vector<double> descriptor_time;
   std::vector<double> querying_time;
   std::vector<double> update_time;
-  int triggle_loop_num = 0;
+  // int triggle_loop_num = 0;
 
-  while (ros::ok()) {
-    int true_loop_frames = 0;
-    int true_positive_recall = 0;//! 正确回环上
-    int true_in_reality = 0;
-    int true_positive_precision = 0;
-    int true_loop_frames_tmp = 0;
-    int true_positive_recall_tmp = 0;//! 正确回环上
-    int true_in_reality_tmp = 0;
-    int true_positive_precision_tmp = 0;
-    pcl::PointCloud<pcl::PointXYZ> pose_tree;
-    pcl::KdTreeFLANN<pcl::PointXYZ> tree;
-    FixSizeCloudDeque queue(10);
+  // while (ros::ok()) {
+    // int true_loop_frames = 0;
+    // int true_positive_recall = 0;//! 正确回环上
+    // int true_in_reality = 0;
+    // int true_positive_precision = 0;
+    // int true_loop_frames_tmp = 0;
+    // int true_positive_recall_tmp = 0;//! 正确回环上
+    // int true_in_reality_tmp = 0;
+    // int true_positive_precision_tmp = 0;
+    // pcl::PointCloud<pcl::PointXYZ> pose_tree;
+    // pcl::KdTreeFLANN<pcl::PointXYZ> tree;
+    // FixSizeCloudDeque queue(10);
 
 
 
-    BOOST_FOREACH (int i, pcd_index) {//! view里的每个m。遍历，并非多线程！
-        double laser_time = times_vec[i];
-        pcl::PointCloud<pcl::PointXYZI> cloud;
-        pcl::io::loadPCDFile(dir_path + "/" + tag_vec[i] + ".pcd", cloud);
-        Eigen::Vector3d translation = poses_vec[i].first;
-        Eigen::Matrix3d rotation = poses_vec[i].second;
+    // BOOST_FOREACH (int i, pcd_index) {//! view里的每个m。遍历，并非多线程！
+    //     double laser_time = times_vec[i];
+    //     pcl::PointCloud<pcl::PointXYZI> cloud;
+    //     pcl::io::loadPCDFile(dir_path + "/" + tag_vec[i] + ".pcd", cloud);
+    //     Eigen::Vector3d translation = poses_vec[i].first;
+    //     Eigen::Matrix3d rotation = poses_vec[i].second;
         
-        for (size_t i = 0; i < cloud.size(); i++) {
-          Eigen::Vector3d pv = point2vec(cloud.points[i]);
-          pv = rotation * pv + translation;
-          cloud.points[i] = vec2point(pv);
-        }//! 点云转到全局坐标下
-        down_sampling_voxel(cloud, config_setting.ds_size_);
-        // for (auto pv : cloud.points) {
-        //   temp_cloud->points.push_back(pv);//! subumap
-        // }
-        queue.push_back(cloud);
+    //     for (size_t i = 0; i < cloud.size(); i++) {
+    //       Eigen::Vector3d pv = point2vec(cloud.points[i]);
+    //       pv = rotation * pv + translation;
+    //       cloud.points[i] = vec2point(pv);
+    //     }//! 点云转到全局坐标下
+    //     down_sampling_voxel(cloud, config_setting.ds_size_);
+    //     // for (auto pv : cloud.points) {
+    //     //   temp_cloud->points.push_back(pv);//! subumap
+    //     // }
+    //     queue.push_back(cloud);
 
-        // check if keyframe
-        if (cloudInd % config_setting.sub_frame_num_ == 0 && cloudInd != 0) {
-          for(const auto& cloud : queue.clouds){
-            *temp_cloud += cloud;
-          }
+    //     // check if keyframe
+    //     if (cloudInd % config_setting.sub_frame_num_ == 0 && cloudInd != 0) {
+    //       for(const auto& cloud : queue.clouds){
+    //         *temp_cloud += cloud;
+    //       }
+        for(int pcd_id = 1; pcd_id <= 5; ++pcd_id){
+          std::string reloc_dir_path = "/media/jin/MyPassport/NTU_HELMET/jin/";
+          pcl::io::loadPCDFile(reloc_dir_path + "/pcd/scans" + std::to_string(pcd_id) + ".pcd", *temp_cloud);
           down_sampling_voxel(*temp_cloud, config_setting.ds_size_);
-          std::cout << "Key Frame id:" << keyCloudInd
-                    << ", cloud size: " << temp_cloud->size() << std::endl;
+          // std::cout << "Key Frame id:" << keyCloudInd
+          //           << ", cloud size: " << temp_cloud->size() << std::endl;
+          std::cout << "cloud size: " << temp_cloud->size() << std::endl;
           // step1. Descriptor Extraction
           auto t_descriptor_begin = std::chrono::high_resolution_clock::now();
           std::vector<STDesc> stds_vec;
           std_manager->GenerateSTDescs(temp_cloud, stds_vec);//todo 带着绝对值的
-          //!
-          std_manager->ClearTmp();
-          //!
+
           LOG(INFO) << "descriptor size: " << stds_vec.size();
           auto t_descriptor_end = std::chrono::high_resolution_clock::now();
           descriptor_time.push_back(
@@ -330,27 +332,36 @@ int main(int argc, char **argv) {
           loop_transform.first << 0, 0, 0;
           loop_transform.second = Eigen::Matrix3d::Identity();
           std::vector<std::pair<STDesc, STDesc>> loop_std_pair;
-          if (keyCloudInd > config_setting.skip_near_num_) {//! 最开始数据库低于50的时候不找？
+          // if (keyCloudInd > config_setting.skip_near_num_) {//! 最开始数据库低于50的时候不找？
             std_manager->SearchLoop(stds_vec, search_result, loop_transform,
                                     loop_std_pair);
-          }
+          // }
           if (search_result.first > 0) {
-            std::cout << "***********************************************************[Loop Detection] triggle loop: " << keyCloudInd
+            std::cout << "***********************************************************[Loop Detection] triggle loop: " << pcd_id
                       << "--" << search_result.first
                       << ", score:" << search_result.second << std::endl;
-            filesystem::create_directory(dir_path + "/../reloc/");
+            LOG(INFO) << "Before PlaneGeomrtricIcp: " << loop_transform.first;
+            LOG(INFO) << loop_transform.second;
+            std_manager->PlaneGeomrtricIcp(std_manager->plane_cloud_vec_.back(), std_manager->plane_cloud_vec_[search_result.first], loop_transform);
+            LOG(INFO) << "After PlaneGeomrtricIcp: " << loop_transform.first;
+            LOG(INFO) << loop_transform.second;
+            filesystem::create_directory(reloc_dir_path + "/reloc/");
             Eigen::Matrix4d delta_pose;
             delta_pose << loop_transform.second, loop_transform.first,
                           0.0, 0.0, 0.0, 1.0;
             LOG(INFO) << "Delta: " << delta_pose;
             pcl::PointCloud<pcl::PointXYZI>::Ptr transformed_cloud(new pcl::PointCloud<pcl::PointXYZI>());
             pcl::transformPointCloud<pcl::PointXYZI>(*temp_cloud, *transformed_cloud, delta_pose);
-            pcl::io::savePCDFileBinaryCompressed(dir_path + "/../reloc/" + std::to_string(keyCloudInd) + "_" + std::to_string(search_result.first) + ".pcd", *transformed_cloud);            
+            pcl::io::savePCDFileBinaryCompressed(reloc_dir_path + "/reloc/" + std::to_string(pcd_id) + "_" + std::to_string(search_result.first) + ".pcd", *transformed_cloud);            
           }else{
             LOG(INFO) << "No loop is found!";
           }
           auto t_query_end = std::chrono::high_resolution_clock::now();
           querying_time.push_back(time_inc(t_query_end, t_query_begin));
+
+          //!
+          std_manager->ClearTmp();
+          //!
 
           //! debug
           {
@@ -382,82 +393,82 @@ int main(int argc, char **argv) {
             // }
           }
 
-          bool relocalization = false;
-          if(relocalization){
-            // start of relocalization, transform cloud back into current pose
-            // step1. Descriptor Extraction
-            std::cout << "**************relocalization" << std::endl;
-            pcl::PointCloud<pcl::PointXYZI>::Ptr tmp_cloud(new pcl::PointCloud<pcl::PointXYZI>);
-            *tmp_cloud = *temp_cloud;
-            // {// align to gravity
-            //   double current_yaw = GetYaw(rotation);
-            //   LOG(INFO) << "Yaw: " << current_yaw / M_PI * 180.0;
-            //   Eigen::Matrix3d tmp_rot = Eigen::AngleAxisd(current_yaw, Eigen::Vector3d::UnitZ()).matrix();
+          // bool relocalization = false;
+          // if(relocalization){
+          //   // start of relocalization, transform cloud back into current pose
+          //   // step1. Descriptor Extraction
+          //   std::cout << "**************relocalization" << std::endl;
+          //   pcl::PointCloud<pcl::PointXYZI>::Ptr tmp_cloud(new pcl::PointCloud<pcl::PointXYZI>);
+          //   *tmp_cloud = *temp_cloud;
+          //   // {// align to gravity
+          //   //   double current_yaw = GetYaw(rotation);
+          //   //   LOG(INFO) << "Yaw: " << current_yaw / M_PI * 180.0;
+          //   //   Eigen::Matrix3d tmp_rot = Eigen::AngleAxisd(current_yaw, Eigen::Vector3d::UnitZ()).matrix();
               
-            //   for (size_t i = 0; i < tmp_cloud->size(); i++) {
-            //     Eigen::Vector3d pv = point2vec(tmp_cloud->points[i]);
-            //     pv = tmp_rot.inverse() * (pv - translation);
-            //     tmp_cloud->points[i] = vec2point(pv);
-            //   }
-            // }
-            for (size_t i = 0; i < tmp_cloud->size(); i++) {
-              Eigen::Vector3d pv = point2vec(tmp_cloud->points[i]);
-              pv = rotation.inverse() * (pv - translation);
-              tmp_cloud->points[i] = vec2point(pv);
-            }
-            std::vector<STDesc> stds_vec;
-            std_manager->GenerateSTDescs(tmp_cloud, stds_vec);
-            LOG(INFO) << "descriptor size: " << stds_vec.size();
-            std_manager->ClearTmp();// Recover the change to member variables caused by GenerateSTDescs
+          //   //   for (size_t i = 0; i < tmp_cloud->size(); i++) {
+          //   //     Eigen::Vector3d pv = point2vec(tmp_cloud->points[i]);
+          //   //     pv = tmp_rot.inverse() * (pv - translation);
+          //   //     tmp_cloud->points[i] = vec2point(pv);
+          //   //   }
+          //   // }
+          //   for (size_t i = 0; i < tmp_cloud->size(); i++) {
+          //     Eigen::Vector3d pv = point2vec(tmp_cloud->points[i]);
+          //     pv = rotation.inverse() * (pv - translation);
+          //     tmp_cloud->points[i] = vec2point(pv);
+          //   }
+          //   std::vector<STDesc> stds_vec;
+          //   std_manager->GenerateSTDescs(tmp_cloud, stds_vec);
+          //   LOG(INFO) << "descriptor size: " << stds_vec.size();
+          //   std_manager->ClearTmp();// Recover the change to member variables caused by GenerateSTDescs
 
-            // step2. Searching Loop
-            std::pair<int, double> search_result(-1, 0);
-            std::pair<Eigen::Vector3d, Eigen::Matrix3d> loop_transform;
-            loop_transform.first << 0, 0, 0;
-            loop_transform.second = Eigen::Matrix3d::Identity();
-            std::vector<std::pair<STDesc, STDesc>> loop_std_pair;
-            if (keyCloudInd > config_setting.skip_near_num_) {
-              std_manager->SearchLoop(stds_vec, search_result, loop_transform,
-                                      loop_std_pair);
-            }
-            if (search_result.first > 0) {
-              std::cout << "[Loop Detection] triggle loop: " << keyCloudInd
-                        << "--" << search_result.first
-                        << ", score:" << search_result.second << std::endl;
-            }else{
-              LOG(INFO) << "No loop is found!";
-            }
+          //   // step2. Searching Loop
+          //   std::pair<int, double> search_result(-1, 0);
+          //   std::pair<Eigen::Vector3d, Eigen::Matrix3d> loop_transform;
+          //   loop_transform.first << 0, 0, 0;
+          //   loop_transform.second = Eigen::Matrix3d::Identity();
+          //   std::vector<std::pair<STDesc, STDesc>> loop_std_pair;
+          //   if (keyCloudInd > config_setting.skip_near_num_) {
+          //     std_manager->SearchLoop(stds_vec, search_result, loop_transform,
+          //                             loop_std_pair);
+          //   }
+          //   if (search_result.first > 0) {
+          //     std::cout << "[Loop Detection] triggle loop: " << keyCloudInd
+          //               << "--" << search_result.first
+          //               << ", score:" << search_result.second << std::endl;
+          //   }else{
+          //     LOG(INFO) << "No loop is found!";
+          //   }
 
-            //! debug
-            {
-              std::vector<int> indexs;
-              std::vector<float> dis;
-              pcl::PointXYZ pose_point;
-              pose_point.x = translation.x();
-              pose_point.y = translation.y();
-              pose_point.z = translation.z();
-              if(keyCloudInd > config_setting.skip_near_num_){
-                if(tree.radiusSearch(pose_point, 20, indexs, dis) > 0){
-                  for(int id : indexs){
-                    if (id < pose_tree.size() - config_setting.skip_near_num_){
-                      true_loop_frames_tmp++;
-                      if(search_result.first > 0 && (poses_vec[search_result.first].first - poses_vec[i].first).norm() < 20){
-                        true_positive_recall_tmp++;
-                      }
-                      break;
-                    }
-                  }
-                }
-                if(search_result.first > 0){
-                  true_in_reality_tmp++;
-                  if((poses_vec[search_result.first].first - poses_vec[i].first).norm() < 20){
-                    true_positive_precision_tmp++;
-                  }
-                }
-              }
-            }
-            std::cout << "end of relocalization**************" << std::endl;
-          }// end of relocalization
+          //   //! debug
+          //   {
+          //     std::vector<int> indexs;
+          //     std::vector<float> dis;
+          //     pcl::PointXYZ pose_point;
+          //     pose_point.x = translation.x();
+          //     pose_point.y = translation.y();
+          //     pose_point.z = translation.z();
+          //     if(keyCloudInd > config_setting.skip_near_num_){
+          //       if(tree.radiusSearch(pose_point, 20, indexs, dis) > 0){
+          //         for(int id : indexs){
+          //           if (id < pose_tree.size() - config_setting.skip_near_num_){
+          //             true_loop_frames_tmp++;
+          //             if(search_result.first > 0 && (poses_vec[search_result.first].first - poses_vec[i].first).norm() < 20){
+          //               true_positive_recall_tmp++;
+          //             }
+          //             break;
+          //           }
+          //         }
+          //       }
+          //       if(search_result.first > 0){
+          //         true_in_reality_tmp++;
+          //         if((poses_vec[search_result.first].first - poses_vec[i].first).norm() < 20){
+          //           true_positive_precision_tmp++;
+          //         }
+          //       }
+          //     }
+          //   }
+          //   std::cout << "end of relocalization**************" << std::endl;
+          // }// end of relocalization
 
           // // step3. Add descriptors to the database
           // auto t_map_update_begin = std::chrono::high_resolution_clock::now();
@@ -557,35 +568,36 @@ int main(int argc, char **argv) {
 
 
           temp_cloud->clear();//! 清除submap
-          keyCloudInd++;//! 关键帧序号自增
+          // keyCloudInd++;//! 关键帧序号自增
           loop.sleep();
           std::cout << std::endl;
         }
-        cloudInd++;
-    }
-    double mean_descriptor_time =
-        std::accumulate(descriptor_time.begin(), descriptor_time.end(), 0) *
-        1.0 / descriptor_time.size();
-    double mean_query_time =
-        std::accumulate(querying_time.begin(), querying_time.end(), 0) * 1.0 /
-        querying_time.size();
-    double mean_update_time =
-        std::accumulate(update_time.begin(), update_time.end(), 0) * 1.0 /
-        update_time.size();
-    std::cout << "Total key frame number:" << keyCloudInd
-              << ", loop number:" << triggle_loop_num << std::endl;
-    std::cout << "Mean time for descriptor extraction: " << mean_descriptor_time
-              << "ms, query: " << mean_query_time
-              << "ms, update: " << mean_update_time << "ms, total: "
-              << mean_descriptor_time + mean_query_time + mean_update_time
-              << "ms" << std::endl;
-    LOG(INFO) << true_positive_recall << "/" << true_loop_frames << " = Recall rate: " << float(true_positive_recall) / true_loop_frames;
-    LOG(INFO) << true_positive_precision << "/" << true_in_reality << " = Precision rate: " << float(true_positive_precision) / true_in_reality;
+        // }
+        // cloudInd++;
+    // }
+    // double mean_descriptor_time =
+    //     std::accumulate(descriptor_time.begin(), descriptor_time.end(), 0) *
+    //     1.0 / descriptor_time.size();
+    // double mean_query_time =
+    //     std::accumulate(querying_time.begin(), querying_time.end(), 0) * 1.0 /
+    //     querying_time.size();
+    // double mean_update_time =
+    //     std::accumulate(update_time.begin(), update_time.end(), 0) * 1.0 /
+    //     update_time.size();
+    // std::cout << "Total key frame number:" << keyCloudInd
+    //           << ", loop number:" << triggle_loop_num << std::endl;
+    // std::cout << "Mean time for descriptor extraction: " << mean_descriptor_time
+    //           << "ms, query: " << mean_query_time
+    //           << "ms, update: " << mean_update_time << "ms, total: "
+    //           << mean_descriptor_time + mean_query_time + mean_update_time
+    //           << "ms" << std::endl;
+    // LOG(INFO) << true_positive_recall << "/" << true_loop_frames << " = Recall rate: " << float(true_positive_recall) / true_loop_frames;
+    // LOG(INFO) << true_positive_precision << "/" << true_in_reality << " = Precision rate: " << float(true_positive_precision) / true_in_reality;
 
-    LOG(INFO) << true_positive_recall_tmp << "/" << true_loop_frames_tmp << " = Recall rate: " << float(true_positive_recall_tmp) / true_loop_frames_tmp;
-    LOG(INFO) << true_positive_precision_tmp << "/" << true_in_reality_tmp << " = Precision rate: " << float(true_positive_precision_tmp) / true_in_reality_tmp;
-    break;
-  }
+    // LOG(INFO) << true_positive_recall_tmp << "/" << true_loop_frames_tmp << " = Recall rate: " << float(true_positive_recall_tmp) / true_loop_frames_tmp;
+    // LOG(INFO) << true_positive_precision_tmp << "/" << true_in_reality_tmp << " = Precision rate: " << float(true_positive_precision_tmp) / true_in_reality_tmp;
+    // break;
+  // }
 
   return 0;
 }

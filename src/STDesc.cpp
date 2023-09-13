@@ -420,6 +420,7 @@ void STDescManager::SearchLoop(
     loop_std_pair = best_sucess_match_vec;
     return;
   } else {
+    LOG(INFO) << "ICP score is too low: " << best_score;
     loop_result = std::pair<int, double>(-1, 0);
     return;
   }
@@ -450,7 +451,7 @@ void STDescManager::AddSTDescs(const std::vector<STDesc> &stds_vec) {
 }
 
 void STDescManager::WriteIntoFile(std::string file_path, const std::vector<STDesc> &stds_vec){
-  std::ofstream of(file_path + ".txt", std::ios::out);
+  std::ofstream of(file_path + ".txt", std::ios::out | std::ios::binary);
   for (const STDesc& single_std : stds_vec) {
     of << single_std.side_length_(0) << " " << single_std.side_length_(1) << " " << single_std.side_length_(2) << " " <<
           single_std.angle_(0) << " " << single_std.angle_(1) << " " << single_std.angle_(2) << " " <<
@@ -1357,7 +1358,7 @@ void STDescManager::candidate_verify(
     }
   }
   if (max_vote >= 4) {
-    auto best_pair = candidate_matcher.match_list_[max_vote_index * skip_len];
+    auto best_pair = candidate_matcher.match_list_[max_vote_index * skip_len];//! jin:ransac最优结果
     int vote = 0;
     Eigen::Matrix3d best_rot;
     Eigen::Vector3d best_t;
@@ -1470,7 +1471,8 @@ double STDescManager::plane_geometric_verify(
       }
     }
   }
-  return useful_match / source_cloud->size();
+  // return useful_match / source_cloud->size();
+  return useful_match;
 }
 
 void STDescManager::PlaneGeomrtricIcp(

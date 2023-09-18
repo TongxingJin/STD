@@ -9,7 +9,7 @@
 		name="relocalization" 
 		output="screen" 
 	/>
-  <param name="dir_path" type="string" value = "/media/jin/MyPassport/NTU_HELMET/20230823-1524/2023-08-23-15-24-12/frameClouds/"/>
+  <param name="dir_path" type="string" value = "/media/jin/MyPassport/NTU_HELMET/sn_1s/frameClouds/"/>
   <param name="bag_path" type="string" value = "/home/jin/ntu/std_ws/src/STD/data/park1.bag"/>
   <param name="pose_path" type="string" value = "/home/jin/ntu/std_ws/src/STD/data/park1_pose.txt"/>
 

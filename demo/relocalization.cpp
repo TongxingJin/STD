@@ -239,16 +239,27 @@ int main(int argc, char **argv) {
   std::vector<std::string> std_name_vec;
   while(ite != non_ite){
     if(!filesystem::is_directory(*ite) && ite->path().extension() == ".txt"){
-      std_name_vec.emplace_back(ite->path().stem().string());
+      if(std::stoi(ite->path().stem().string()) <= 70){
+        std_name_vec.emplace_back(ite->path().stem().string());        
+      }
     }
     ite++;
   }
   LOG(INFO) << std_name_vec.size() << " files are found!";
-  sort(std_name_vec.begin(), std_name_vec.end());
+  sort(std_name_vec.begin(), std_name_vec.end(), [](std::string name1, std::string name2)->bool{return std::stoi(name1) < std::stoi(name2);});
+  //! todo
+  std_manager->plane_cloud_vec_.resize(std::stoi(std_name_vec.back()) + 1);
+  std_manager->current_frame_id_ = std::stoi(std_name_vec.back()) + 1;
+  std_manager->std_nums_.resize(std::stoi(std_name_vec.back()) + 1, 0);
   for(const std::string& file_name : std_name_vec){
+    // if(std::stoi(file_name) > 300 && std::stoi(file_name) < 750){
+    //   continue;
+    // }
+    LOG(INFO) << "Loading from " << dir_path << "/../stds/" << file_name;
     std_manager->LoadFromFile(dir_path + "/../stds/" + file_name);
   }
   LOG(INFO) << "Database size: " << std_manager->data_base_.size();
+  LOG(INFO) << "Current frame id: " << std_manager->current_frame_id_;
 
   // std::vector<std::string> tag_vec;
   // std::vector<std::pair<Eigen::Vector3d, Eigen::Matrix3d>> poses_vec;
@@ -309,10 +320,16 @@ int main(int argc, char **argv) {
     //       for(const auto& cloud : queue.clouds){
     //         *temp_cloud += cloud;
     //       }
-        for(int pcd_id = 1; pcd_id <= 5; ++pcd_id){
-          std::string reloc_dir_path = "/media/jin/MyPassport/NTU_HELMET/jin/";
-          pcl::io::loadPCDFile(reloc_dir_path + "/pcd/scans" + std::to_string(pcd_id) + ".pcd", *temp_cloud);
-          down_sampling_voxel(*temp_cloud, config_setting.ds_size_);
+        for(int pcd_id = 20; pcd_id <= 74; pcd_id += 1){
+          // if(pcd_id < 750 && pcd_id > 300) continue;
+          // LOG(INFO) << "Database Plan Num: " << std_manager->plane_cloud_vec_.size();
+          // LOG(INFO) << "Target plane size: " << std_manager->plane_cloud_vec_[pcd_id]->size();
+          for(int rot = 0; rot < 180; rot += 30){
+          std::string reloc_dir_path = "/media/jin/MyPassport/NTU_HELMET/0917/2/2023-09-17-22-07-29/reloc/";
+          pcl::io::loadPCDFile(reloc_dir_path + "/pcd/" + std::to_string(pcd_id) + ".pcd", *temp_cloud);
+          pcl::transformPointCloud<pcl::PointXYZI>(*temp_cloud, *temp_cloud, Eigen::Vector3f::Zero(), Eigen::Quaternionf(Eigen::AngleAxisf(rot / 180.0 * M_PI, Eigen::Vector3f::UnitZ())));
+          LOG(INFO) << "Current pcd id: " << pcd_id;
+          // down_sampling_voxel(*temp_cloud, config_setting.ds_size_);
           // std::cout << "Key Frame id:" << keyCloudInd
           //           << ", cloud size: " << temp_cloud->size() << std::endl;
           std::cout << "cloud size: " << temp_cloud->size() << std::endl;
@@ -320,6 +337,7 @@ int main(int argc, char **argv) {
           auto t_descriptor_begin = std::chrono::high_resolution_clock::now();
           std::vector<STDesc> stds_vec;
           std_manager->GenerateSTDescs(temp_cloud, stds_vec);//todo 带着绝对值的
+          // LOG(INFO) << "Current frame plane num: " << std_manager->plane_cloud_vec_.back()->size();
 
           LOG(INFO) << "descriptor size: " << stds_vec.size();
           auto t_descriptor_end = std::chrono::high_resolution_clock::now();
@@ -340,18 +358,17 @@ int main(int argc, char **argv) {
             std::cout << "***********************************************************[Loop Detection] triggle loop: " << pcd_id
                       << "--" << search_result.first
                       << ", score:" << search_result.second << std::endl;
-            LOG(INFO) << "Before PlaneGeomrtricIcp: " << loop_transform.first;
-            LOG(INFO) << loop_transform.second;
+            // LOG(INFO) << loop_transform.second;
             std_manager->PlaneGeomrtricIcp(std_manager->plane_cloud_vec_.back(), std_manager->plane_cloud_vec_[search_result.first], loop_transform);
-            LOG(INFO) << "After PlaneGeomrtricIcp: " << loop_transform.first;
-            LOG(INFO) << loop_transform.second;
+            // LOG(INFO) << loop_transform.second;
             filesystem::create_directory(reloc_dir_path + "/reloc/");
             Eigen::Matrix4d delta_pose;
             delta_pose << loop_transform.second, loop_transform.first,
                           0.0, 0.0, 0.0, 1.0;
-            LOG(INFO) << "Delta: " << delta_pose;
+            // LOG(INFO) << "Delta: " << delta_pose;
             pcl::PointCloud<pcl::PointXYZI>::Ptr transformed_cloud(new pcl::PointCloud<pcl::PointXYZI>());
             pcl::transformPointCloud<pcl::PointXYZI>(*temp_cloud, *transformed_cloud, delta_pose);
+            LOG(INFO) << "Saving into " << reloc_dir_path + "/reloc/" + std::to_string(pcd_id) + "_" + std::to_string(search_result.first) + ".pcd";
             pcl::io::savePCDFileBinaryCompressed(reloc_dir_path + "/reloc/" + std::to_string(pcd_id) + "_" + std::to_string(search_result.first) + ".pcd", *transformed_cloud);            
           }else{
             LOG(INFO) << "No loop is found!";
@@ -360,7 +377,9 @@ int main(int argc, char **argv) {
           querying_time.push_back(time_inc(t_query_end, t_query_begin));
 
           //!
+          // LOG(INFO) << "Before clear: " << std_manager->plane_cloud_vec_.size();
           std_manager->ClearTmp();
+          // LOG(INFO) << "After clear: " << std_manager->plane_cloud_vec_.size();
           //!
 
           //! debug
@@ -571,6 +590,7 @@ int main(int argc, char **argv) {
           // keyCloudInd++;//! 关键帧序号自增
           loop.sleep();
           std::cout << std::endl;
+          }
         }
         // }
         // cloudInd++;

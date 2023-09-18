@@ -72,7 +72,7 @@ void load_custom_pose_with_time(const std::string &pose_dir,
   filesystem::directory_iterator ite(file_dir);
   filesystem::directory_iterator non_ite;
   while(ite != non_ite){
-    if(!filesystem::is_directory(*ite) && ite->path().extension() == ".txt"){
+    if(!filesystem::is_directory(*ite) && ite->path().extension() == ".odom"){
       tag_vec.emplace_back(ite->path().stem().string());
     }
     ite++;
@@ -87,7 +87,7 @@ void load_custom_pose_with_time(const std::string &pose_dir,
     std::replace(tag.begin(), tag.end(), '_', '.');
     times_vec.emplace_back(std::stod(tag));
     // LOG(INFO) << std::setprecision(19) << times_vec.back();
-    std::ifstream pose_file(pose_dir + "/" + tag_vec[index] + ".txt", std::ios::in);
+    std::ifstream pose_file(pose_dir + "/" + tag_vec[index] + ".odom", std::ios::in);
 
     std::vector<double> poses;
     std::string line;
@@ -128,31 +128,31 @@ void load_custom_pose_with_time(const std::string &pose_dir,
   LOG(INFO) << "Time stamp size: " << times_vec.size();
   // assert(tag_vec.size() == poses_vec.size() == times_vec.size());
   
-  pcl::PointCloud<pcl::PointXYZI> map;
-  // pcl::PointCloud<pcl::PointXYZI> track;
-  for(int index = 0; index < tag_vec.size(); ++index){
-    pcl::PointCloud<pcl::PointXYZI> scan;
-    pcl::io::loadPCDFile(pose_dir + "/" + tag_vec[index] + ".pcd", scan);
-    down_sampling_voxel(scan, 0.2);
-    Eigen::Matrix4d pose;
-    pose << poses_vec[index].second, poses_vec[index].first,
-            0, 0, 0, 1;
-    pcl::transformPointCloud(scan, scan, pose);
-    map += scan;
-    pcl::PointXYZI p;
-    p.x = poses_vec[index].first.x();
-    p.y = poses_vec[index].first.y();
-    p.z = poses_vec[index].first.z();
-    // track.push_back(p);
-    LOG(INFO) << "Index: " << index + 1 << "/" << tag_vec.size();
-  }
-  LOG(INFO) << "Map size: " << map.size();
-  pcl::io::savePCDFileBinaryCompressed(pose_dir + "/map.pcd", map);
-  // pcl::io::savePCDFileBinaryCompressed(pose_dir + "/track.pcd", track);
-  // LOG(FATAL) << "Done";
-  // for(int index = 1; index < tag_vec.size(); ++index){
-  //   LOG(INFO) << "diff " << index << ": " << (poses_vec[index].first - poses_vec[index - 1].first).norm();
+  // pcl::PointCloud<pcl::PointXYZI> map;
+  // // pcl::PointCloud<pcl::PointXYZI> track;
+  // for(int index = 0; index < tag_vec.size(); ++index){
+  //   pcl::PointCloud<pcl::PointXYZI> scan;
+  //   pcl::io::loadPCDFile(pose_dir + "/" + tag_vec[index] + ".pcd", scan);
+  //   down_sampling_voxel(scan, 0.2);
+  //   Eigen::Matrix4d pose;
+  //   pose << poses_vec[index].second, poses_vec[index].first,
+  //           0, 0, 0, 1;
+  //   pcl::transformPointCloud(scan, scan, pose);
+  //   map += scan;
+  //   pcl::PointXYZI p;
+  //   p.x = poses_vec[index].first.x();
+  //   p.y = poses_vec[index].first.y();
+  //   p.z = poses_vec[index].first.z();
+  //   // track.push_back(p);
+  //   LOG(INFO) << "Index: " << index + 1 << "/" << tag_vec.size();
   // }
+  // LOG(INFO) << "Map size: " << map.size();
+  // pcl::io::savePCDFileBinaryCompressed(pose_dir + "/map.pcd", map);
+  // // pcl::io::savePCDFileBinaryCompressed(pose_dir + "/track.pcd", track);
+  // // LOG(FATAL) << "Done";
+  // // for(int index = 1; index < tag_vec.size(); ++index){
+  // //   LOG(INFO) << "diff " << index << ": " << (poses_vec[index].first - poses_vec[index - 1].first).norm();
+  // // }
 
 }
 
@@ -271,7 +271,7 @@ int main(int argc, char **argv) {
     // }
     pcl::KdTreeFLANN<pcl::PointXYZ> tree;
     // tree.setInputCloud(pose_tree.makeShared());
-    FixSizeCloudDeque queue(100);
+    FixSizeCloudDeque queue(80);
 
     BOOST_FOREACH (int i, pcd_index) {//! view里的每个m。遍历，并非多线程！
         double laser_time = times_vec[i];
@@ -296,18 +296,25 @@ int main(int argc, char **argv) {
           for(const auto& cloud : queue.clouds){
             *temp_cloud += cloud;
           }
+
+          Eigen::Matrix3d horizon_r = GetHorizon(rotation);
+          // for (size_t i = 0; i < temp_cloud->size(); i++) {
+          //     Eigen::Vector3d pv = point2vec(temp_cloud->points[i]);
+          //     pv = rotation.inverse() * (pv - translation);
+          //     temp_cloud->points[i] = vec2point(pv);
+          // }
           for (size_t i = 0; i < temp_cloud->size(); i++) {
               Eigen::Vector3d pv = point2vec(temp_cloud->points[i]);
-              pv = rotation.inverse() * (pv - translation);
+              pv = horizon_r.inverse() * (pv - translation);
               temp_cloud->points[i] = vec2point(pv);
-            }
-          down_sampling_voxel(*temp_cloud, config_setting.ds_size_);
+          }
+          down_sampling_voxel(*temp_cloud, config_setting.ds_size_);//todo jin: align to gravity
           std::cout << "Key Frame id:" << keyCloudInd
                     << ", cloud size: " << temp_cloud->size() << std::endl;
           // step1. Descriptor Extraction
           auto t_descriptor_begin = std::chrono::high_resolution_clock::now();
           std::vector<STDesc> stds_vec;
-          std_manager->GenerateSTDescs(temp_cloud, stds_vec);//todo 带着绝对值的
+          std_manager->GenerateSTDescs(temp_cloud, stds_vec);
           LOG(INFO) << "descriptor size: " << stds_vec.size();
           auto t_descriptor_end = std::chrono::high_resolution_clock::now();
           descriptor_time.push_back(
@@ -455,12 +462,15 @@ int main(int argc, char **argv) {
           //         single_std.vertex_attached_(0) << " " << single_std.vertex_attached_(1) << " " << single_std.vertex_attached_(2) << "\n";
           // }
           // of.close();
-          filesystem::create_directories(dir_path + "/../stds/");
-          std::string std_file(dir_path + "/../stds/" + std::to_string(stds_vec.front().frame_id_));
-          std_manager->WriteIntoFile(std_file, stds_vec);
+          if(!stds_vec.empty()){
+            filesystem::create_directories(dir_path + "/../stds/");
+            std::string std_file(dir_path + "/../stds/" + std::to_string(stds_vec.front().frame_id_));
+            std_manager->WriteIntoFile(std_file, stds_vec);
+          }
+          
           //debug
           filesystem::create_directories(dir_path + "/../stds/ori_clouds/");
-          pcl::io::savePCDFileBinaryCompressed(dir_path + "/../stds/ori_clouds/" + std::to_string(stds_vec.front().frame_id_) + ".pcd", *temp_cloud);
+          pcl::io::savePCDFileBinaryCompressed(dir_path + "/../stds/ori_clouds/" + std::to_string(std_manager->current_frame_id_) + ".pcd", *temp_cloud);
           std_manager->AddSTDescs(stds_vec);
           // auto t_map_update_end = std::chrono::high_resolution_clock::now();
           // update_time.push_back(time_inc(t_map_update_end, t_map_update_begin));

@@ -1,12 +1,12 @@
 # pre process
 ds_size: 0.1
-maximum_corner_num: 500
+maximum_corner_num: 100
 
 # key points
 plane_detection_thre: 0.01 #svd分解最小特征值
 plane_merge_normal_thre: 0.3 #法线之差或者和
 voxel_size: 1 # 栅格尺寸
-voxel_init_num: 10 # 栅格至少有10个点才能进行平面的拟合
+voxel_init_num: 100 # 栅格至少有10个点才能进行平面的拟合
 proj_image_resolution: 0.25
 proj_dis_min: 0
 proj_dis_max: 5
@@ -22,9 +22,9 @@ std_side_resolution: 0.2 #离散化的时候的分辨率
 # candidate search
 skip_near_num: 3 #最近一定帧数不找回环
 candidate_num: 50
-sub_frame_num: 50
+sub_frame_num: 1
 vertex_diff_threshold: 0.8 #对比描述子相似性的参数
 rough_dis_threshold: 0.05 #允许三角形周长误差的比例
 normal_threshold: 0.3
 dis_threshold: 0.5 #这两个参数用在面和面匹配
-icp_threshold: 150 #0.1
+icp_threshold: 0.4 #0.1

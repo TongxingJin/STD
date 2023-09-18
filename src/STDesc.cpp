@@ -382,8 +382,28 @@ void STDescManager::SearchLoop(
   // step1, select candidates, default number 50
   auto t1 = std::chrono::high_resolution_clock::now();
   std::vector<STDMatchList> candidate_matcher_vec;
+  // LOG(INFO) << "Current std size: " << stds_vec.size();
+  // for(int i = 0; i < 3; ++i){
+  //   const auto& single_std = stds_vec[i];
+  //   LOG(INFO) << single_std.side_length_(0) << " " << single_std.side_length_(1) << " " << single_std.side_length_(2) << " " <<
+  //         single_std.angle_(0) << " " << single_std.angle_(1) << " " << single_std.angle_(2) << " " <<
+  //         single_std.center_(0) << " " << single_std.center_(1) << " " << single_std.center_(2) << " " << 
+  //         single_std.frame_id_ << " " <<
+  //         single_std.vertex_A_(0) << " " << single_std.vertex_A_(1) << " " << single_std.vertex_A_(2) << " " <<
+  //         single_std.vertex_B_(0) << " " << single_std.vertex_B_(1) << " " << single_std.vertex_B_(2) << " " <<
+  //         single_std.vertex_C_(0) << " " << single_std.vertex_C_(1) << " " << single_std.vertex_C_(2) << " " <<
+  //         single_std.vertex_attached_(0) << " " << single_std.vertex_attached_(1) << " " << single_std.vertex_attached_(2) << "\n";
+  // }
   candidate_selector(stds_vec, candidate_matcher_vec);//! 查找回环，会通过std找到很多个回环，
   std::cout << candidate_matcher_vec.size() << " candidates is selected!" << std::endl;
+
+  int show_num = 5;
+  if(candidate_matcher_vec.size() < 5){
+    show_num = candidate_matcher_vec.size();
+  }
+  for (size_t i = 0; i < show_num; i++) {
+    LOG(INFO) << candidate_matcher_vec[i].match_id_.first << ", " << candidate_matcher_vec[i].match_id_.second;
+  }
 
   auto t2 = std::chrono::high_resolution_clock::now();
   // step2, select best candidates from rough candidates
@@ -396,10 +416,9 @@ void STDescManager::SearchLoop(
     double verify_score = -1;
     std::pair<Eigen::Vector3d, Eigen::Matrix3d> relative_pose;
     std::vector<std::pair<STDesc, STDesc>> sucess_match_vec;
-    // LOG(INFO) << "Before candidate_verify";
     candidate_verify(candidate_matcher_vec[i], verify_score, relative_pose,
                      sucess_match_vec);//! 顶点到顶点的icp+RANSAC计算位姿，面与面的匹配进行check
-    // LOG(INFO) << "After candidate_verify";
+    // LOG(INFO) << candidate_matcher_vec[i].match_id_.first << ", " << candidate_matcher_vec[i].match_id_.second << ", " << verify_score;
     if (verify_score > best_score) {//! 一定比例的面符合这个T，只保留几何确认得分最高的
       best_score = verify_score;
       best_candidate_id = candidate_matcher_vec[i].match_id_.second;
@@ -409,6 +428,7 @@ void STDescManager::SearchLoop(
     }
   }
   auto t3 = std::chrono::high_resolution_clock::now();
+
 
   // std::cout << "[Time] candidate selector: " << time_inc(t2, t1)
   //           << " ms, candidate verify: " << time_inc(t3, t2) << "ms"
@@ -460,15 +480,17 @@ void STDescManager::WriteIntoFile(std::string file_path, const std::vector<STDes
           single_std.vertex_A_(0) << " " << single_std.vertex_A_(1) << " " << single_std.vertex_A_(2) << " " <<
           single_std.vertex_B_(0) << " " << single_std.vertex_B_(1) << " " << single_std.vertex_B_(2) << " " <<
           single_std.vertex_C_(0) << " " << single_std.vertex_C_(1) << " " << single_std.vertex_C_(2) << " " <<
-          single_std.vertex_attached_(0) << " " << single_std.vertex_attached_(1) << " " << single_std.vertex_attached_(2) << "\n";
+          single_std.vertex_attached_(0) << " " << single_std.vertex_attached_(1) << " " << single_std.vertex_attached_(2) << " " << single_std.std_id_ << "\n";
   }
   of.close();
   pcl::io::savePCDFileBinaryCompressed<pcl::PointXYZINormal>(file_path + ".pcd", *(plane_cloud_vec_.back()));
 }
 
-void STDescManager::LoadFromFile(std::string file_path){
+void STDescManager::LoadFromFile(std::string file_path){//! 确保该函数只对同一帧调用
   std::ifstream file(file_path + ".txt");
   std::string line;
+  int id = 0;
+  int count = 0;
   while(getline(file, line)){
     std::vector<std::string> segments;
     segments = split_line(line, " ");
@@ -481,7 +503,8 @@ void STDescManager::LoadFromFile(std::string file_path){
     single_std.vertex_B_ << std::stod(segments[13]), std::stod(segments[14]), std::stod(segments[15]);
     single_std.vertex_C_ << std::stod(segments[16]), std::stod(segments[17]), std::stod(segments[18]);
     single_std.vertex_attached_ << std::stod(segments[19]), std::stod(segments[20]), std::stod(segments[21]);
-
+    single_std.std_id_ = std::stod(segments[22]);
+    id = single_std.frame_id_;
     // calculate the position of single std
     STDesc_LOC position;
     position.x = (int)(single_std.side_length_[0] + 0.5);//! 边长是以0.2m为单位的
@@ -498,11 +521,14 @@ void STDescManager::LoadFromFile(std::string file_path){
       descriptor_vec.push_back(single_std);
       data_base_[position] = descriptor_vec;
     }
+    count++;
   }
+  std_nums_[id] = count;//! 记录该帧std的数目
 
   pcl::PointCloud<pcl::PointXYZINormal>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZINormal>);
   pcl::io::loadPCDFile(file_path + ".pcd", *cloud);
-  plane_cloud_vec_.push_back(cloud);
+  // plane_cloud_vec_.push_back(cloud);
+  plane_cloud_vec_[id] = cloud;
   
 }
 
@@ -654,6 +680,9 @@ void STDescManager::corner_extractor(
       }
     }
   }
+  //todo 
+  double max_height = 2.5;
+  int count = 0;
   for (auto iter = voxel_map.begin(); iter != voxel_map.end(); iter++) {
     if (!iter->second->plane_ptr_->is_plane_) {//! jin:如果当前voxel不是平面，所以可能是相邻voxel所在平面的边缘
       VOXEL_LOC current_position = iter->first;
@@ -725,16 +754,27 @@ void STDescManager::corner_extractor(
                 new pcl::PointCloud<pcl::PointXYZINormal>);
             extract_corner(projection_center, projection_normal, proj_points,//! 到这里其实并没有大的面的概念，只是把点往一个面voxel上去做投影
                            sub_corner_points);//! 点往平面做投影，像素，计算像素内点数，窗口内取极值完成均匀化，像素内的二维点恢复出三维点作为角点
+
             for (auto pi : sub_corner_points->points) {
+              if(pi.z > max_height){
+                count++;
+                continue;
+              }
               prepare_corner_points->push_back(pi);
             }
+            
             //! 以上，把非面栅格周围3*3*3邻居中的非面点，往该非面栅格6邻域中的非孤立面voxel所在的平面上做投影
           }
         }
       }//! 6邻域平面上都尝试投影一次
     }//! 以上，只是根据某一个非平面voxel为线索，往面上投影提取特征的过程
   }
+  LOG(INFO) << "Skip " << count << " too hight points!";
   non_maxi_suppression(prepare_corner_points);//! 非极大值抑制，只选择梯度最大的
+
+  LOG(INFO) << "Max corner num: " << config_setting_.maximum_corner_num_ << ", current size: " << prepare_corner_points->size();
+
+  // down_sampling_voxel(prepare_corner_points, 1);
 
   if (config_setting_.maximum_corner_num_ > prepare_corner_points->size()) {
     corner_points = prepare_corner_points;
@@ -1031,6 +1071,7 @@ void STDescManager::build_stdesc(
   std::vector<int> pointIdxNKNSearch(near_num);
   std::vector<float> pointNKNSquaredDistance(near_num);
   // Search N nearest corner points to form stds.//! 只需要选择附近一定数量的点，来创建描述子
+  int std_id = 0;
   for (size_t i = 0; i < corner_points->size(); i++) {
     pcl::PointXYZINormal searchPoint = corner_points->points[i];
     if (kd_tree->nearestKSearch(searchPoint, near_num, pointIdxNKNSearch,
@@ -1103,7 +1144,7 @@ void STDescManager::build_stdesc(
           VOXEL_LOC position((int64_t)d_p.x, (int64_t)d_p.y, (int64_t)d_p.z);//! 边长作为key，毫米
           auto iter = feat_map.find(position);
           Eigen::Vector3d normal_1, normal_2, normal_3;
-          if (iter == feat_map.end()) {
+          if (iter == feat_map.end()) {//! 确保每个positio对应的位置只有一个std插入，也避免一个std被插入3次
             Eigen::Vector3d vertex_attached;
             if (l1[0] == l2[0]) {//! 不管ab有没有交换过
               A << p1.x, p1.y, p1.z;
@@ -1156,6 +1197,8 @@ void STDescManager::build_stdesc(
             single_descriptor.angle_[2] = fabs(5 * normal_3.dot(normal_2));
             // single_descriptor.angle << 0, 0, 0;
             single_descriptor.frame_id_ = current_frame_id_;
+            single_descriptor.std_id_ = std_id;
+            std_id++;
             Eigen::Matrix3d triangle_positon;
             feat_map[position] = true;//! position是以mm为单位的
             stds_vec.push_back(single_descriptor);
@@ -1214,7 +1257,7 @@ void STDescManager::candidate_selector(
       if ((src_std.side_length_ - voxel_center).norm() < 1.5) {
         auto iter = data_base_.find(position);
         if (iter != data_base_.end()) {
-          for (size_t j = 0; j < data_base_[position].size(); j++) {//! 同样的position能找到很多个候选的帧
+          for (size_t j = 0; j < data_base_[position].size(); j++) {//! 同样的position能找到很多个候选的std
             if ((src_std.frame_id_ - data_base_[position][j].frame_id_) >
                 config_setting_.skip_near_num_) {//! 一定帧以内的，不进行回环检测
               double dis =
@@ -1237,7 +1280,7 @@ void STDescManager::candidate_selector(
                 if (vertex_attach_diff <
                     config_setting_.vertex_diff_threshold_) {
                   final_match_cnt++;
-                  useful_match[i] = true;
+                  useful_match[i] = true;//! 这个描述子匹配上过database中的数据
                   useful_match_position[i].push_back(position);//! 放在这个position中找近似帧可以找到
                   useful_match_index[i].push_back(j);//! 这个position结果中的第j个
                 }
@@ -1254,23 +1297,50 @@ void STDescManager::candidate_selector(
   // record match index
   std::vector<Eigen::Vector2i, Eigen::aligned_allocator<Eigen::Vector2i>>
       index_recorder;
-  for (size_t i = 0; i < useful_match.size(); i++) {
+  std::vector<std::set<int>> retrieve_num(std_nums_.size());
+  int useful_num = 0;
+  for (size_t i = 0; i < useful_match.size(); i++) {//!遍历当前帧的所有描述子
     if (useful_match[i]) {//! 如果这个描述子找到了关联帧
-      for (size_t j = 0; j < useful_match_index[i].size(); j++) {
-        match_array[data_base_[useful_match_position[i][j]]
+      useful_num++;
+      // for (size_t j = 0; j < useful_match_index[i].size(); j++) {//! 当前关键帧匹配上的所有std
+      //   match_array[data_base_[useful_match_position[i][j]]
+      //                         [useful_match_index[i][j]]
+      //                             .frame_id_] += 1;//! 这一帧的权重+1
+      //   Eigen::Vector2i match_index(i, j);
+      //   index_recorder.push_back(match_index);
+      //   match_index_vec.push_back(
+      //       data_base_[useful_match_position[i][j]][useful_match_index[i][j]]
+      //           .frame_id_);
+      // }
+      double unique_array[MAX_FRAME_N] = {0};
+      for (size_t j = 0; j < useful_match_index[i].size(); j++) {//! 当前描述子匹配上的所有std
+        unique_array[data_base_[useful_match_position[i][j]]
                               [useful_match_index[i][j]]
-                                  .frame_id_] += 1;//! 这一帧的权重+1
-        Eigen::Vector2i match_index(i, j);
+                                  .frame_id_] = 1;//! 这一帧的权重+1
+        retrieve_num[data_base_[useful_match_position[i][j]]
+                              [useful_match_index[i][j]]
+                                  .frame_id_].insert(data_base_[useful_match_position[i][j]][useful_match_index[i][j]].std_id_);
+        Eigen::Vector2i match_index(i, j);//! i std的第j个结果
         index_recorder.push_back(match_index);
         match_index_vec.push_back(
             data_base_[useful_match_position[i][j]][useful_match_index[i][j]]
-                .frame_id_);
+                .frame_id_);//! 真实的id，与上一行对应，知道是这一帧，可以反推对应第i的第j个candidate std。一个std可以通过很多个特征跟多个frame关联起来
+      }
+      for(int index = 0; index < MAX_FRAME_N; ++index){
+        match_array[index] += unique_array[index];// 一个描述子只可以给一帧加权一次，不因3*3*3近邻搜索，及一个格子内有多个std而重复计算
       }
     }
   }
 
+  // LOG(INFO) << "C: " << match_array[0];
+  // LOG(INFO) << "C: " << match_array[660];
+
   // select candidate according to the matching score
-  for (int cnt = 0; cnt < config_setting_.candidate_num_; cnt++) {
+  // for (int cnt = 0; cnt < config_setting_.candidate_num_; cnt++) {
+  // for(int i = -5; i <= 5; i++){
+  //   LOG(INFO) << match_array[10+i];
+  // }
+  while(candidate_matcher_vec.size() < config_setting_.candidate_num_){
     double max_vote = 1;
     int max_vote_index = -1;
     for (int i = 0; i < MAX_FRAME_N; i++) {
@@ -1281,11 +1351,23 @@ void STDescManager::candidate_selector(
     }
     STDMatchList match_triangle_list;
     if (max_vote_index >= 0 && max_vote >= 5) {
+    // if (max_vote_index >= 0 && max_vote >= 0.05 * stds_vec.size()) {
+
+      // LOG(INFO) << "Current vote index: " << max_vote_index << ": " << float(max_vote * retrieve_num[max_vote_index].size()) / (stds_vec.size() * std_nums_[max_vote_index]); 
+      // LOG(INFO) << "Current vote index: " << max_vote_index << ": " << float(max_vote) / stds_vec.size(); 
+
+
       match_array[max_vote_index] = 0;//! 归零当前最好，方便找下一个
+      // if(retrieve_num[max_vote_index].size() < 0.05 * std_nums_[max_vote_index]){//todo 
+      //   LOG(INFO) << "Retrieve ratio is low for fame " << max_vote_index << " : " << float(retrieve_num[max_vote_index].size())/std_nums_[max_vote_index];
+      //   continue;
+      // }else{
+      //   LOG(INFO) << "Retrieve ratio for frame " << max_vote_index << " : " << float(retrieve_num[max_vote_index].size())/std_nums_[max_vote_index];;
+      // }
       match_triangle_list.match_id_.first = current_frame_id_;
-      match_triangle_list.match_id_.second = max_vote_index;
-      for (size_t i = 0; i < index_recorder.size(); i++) {
-        if (match_index_vec[i] == max_vote_index) {
+      match_triangle_list.match_id_.second = max_vote_index;//! 需要找到这个candidate帧对应哪些std
+      for (size_t i = 0; i < index_recorder.size(); i++) {//! 与match_index_vec一样大，其实是所有的匹配对
+        if (match_index_vec[i] == max_vote_index) {//! 如果这个std匹配对属于该帧
           std::pair<STDesc, STDesc> single_match_pair;
           single_match_pair.first = stds_vec[index_recorder[i][0]];
           single_match_pair.second =
@@ -1309,7 +1391,8 @@ void STDescManager::candidate_verify(
     std::pair<Eigen::Vector3d, Eigen::Matrix3d> &relative_pose,
     std::vector<std::pair<STDesc, STDesc>> &sucess_match_vec) {
   sucess_match_vec.clear();
-  int skip_len = (int)(candidate_matcher.match_list_.size() / 50) + 1;
+  // LOG(INFO) << "candidate_matcher.match_list_ size: " << candidate_matcher.match_list_.size();
+  int skip_len = (int)(candidate_matcher.match_list_.size() / 500) + 1;//! 想取50个样本
   int use_size = candidate_matcher.match_list_.size() / skip_len;
   double dis_threshold = 3.0;
   std::vector<size_t> index(use_size);
@@ -1349,6 +1432,10 @@ void STDescManager::candidate_verify(
     vote_list[i] = vote;//! 对第i个candidate的顶点icp匹配结果投票
     mylock.unlock();
   }
+  // LOG(INFO) << "Vote for std matchers: ";
+  // for(int i = 0; i < vote_list.size(); ++i){
+  //   LOG(INFO) << vote_list[i];
+  // }
   int max_vote_index = 0;
   int max_vote = 0;
   for (size_t i = 0; i < vote_list.size(); i++) {
@@ -1385,6 +1472,7 @@ void STDescManager::candidate_verify(
         plane_cloud_vec_.back(),
         plane_cloud_vec_[candidate_matcher.match_id_.second], relative_pose);//! 计算所有平面整体的匹配度，只是确认，并未进一步优化位姿
   } else {
+    LOG(INFO) << "Max vote is small: " << max_vote;
     verify_score = -1;
   }
 }
@@ -1471,8 +1559,8 @@ double STDescManager::plane_geometric_verify(
       }
     }
   }
-  // return useful_match / source_cloud->size();
-  return useful_match;
+  return useful_match / source_cloud->size();
+  // return useful_match;
 }
 
 void STDescManager::PlaneGeomrtricIcp(
@@ -1583,8 +1671,8 @@ void OctoTree::init_plane() {
   evalsReal.rowwise().sum().minCoeff(&evalsMin);//todo jin:这个不是默认排序好了么？
   evalsReal.rowwise().sum().maxCoeff(&evalsMax);
   int evalsMid = 3 - evalsMin - evalsMax;
-  if (evalsReal(evalsMin) < config_setting_.plane_detection_thre_) {//! jin:最小的足够小
-  // if (evalsReal(evalsMin) < config_setting_.plane_detection_thre_ && evalsReal(evalsMin) < 0.1 * evalsReal(evalsMid)) {//todo jin:按比例来计算
+  // if (evalsReal(evalsMin) < config_setting_.plane_detection_thre_) {//! jin:最小的足够小
+  if (evalsReal(evalsMin) < config_setting_.plane_detection_thre_ && evalsReal(evalsMin) < 0.1 * evalsReal(evalsMid)) {//todo jin:按比例来计算
     plane_ptr_->normal_ << evecs.real()(0, evalsMin), evecs.real()(1, evalsMin),
         evecs.real()(2, evalsMin);//! jin：最小的特征向量
     plane_ptr_->min_eigen_value_ = evalsReal(evalsMin);

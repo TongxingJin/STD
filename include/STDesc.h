@@ -21,7 +21,7 @@
 
 #define HASH_P 116101
 #define MAX_N 10000000000
-#define MAX_FRAME_N 20000
+#define MAX_FRAME_N 20000 //todo
 
 typedef struct ConfigSetting {
   /* for point cloud pre-preocess*/
@@ -77,6 +77,9 @@ typedef struct STDesc {
 
   // some other inform attached to each vertex,e.g., intensity
   Eigen::Vector3d vertex_attached_;
+
+  unsigned int std_id_;//!
+
 } STDesc;
 
 // plane structure for corner point extraction
@@ -291,6 +294,8 @@ public:
 
   // save all planes of key frame, required
   std::vector<pcl::PointCloud<pcl::PointXYZINormal>::Ptr> plane_cloud_vec_;
+
+  std::vector<int> std_nums_;
 
   /*Three main processing functions*/
 

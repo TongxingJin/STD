@@ -292,7 +292,8 @@ int main(int argc, char **argv) {
         queue.push_back(cloud);
 
         // check if keyframe
-        if (cloudInd % config_setting.sub_frame_num_ == 0 && cloudInd != 0) {
+        // if (cloudInd % config_setting.sub_frame_num_ == 0 && cloudInd != 0) {
+        if (cloudInd % config_setting.sub_frame_num_ == 0 && cloudInd >= 20) {
           for(const auto& cloud : queue.clouds){
             *temp_cloud += cloud;
           }

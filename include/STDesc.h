@@ -296,6 +296,7 @@ public:
   std::vector<pcl::PointCloud<pcl::PointXYZINormal>::Ptr> plane_cloud_vec_;
 
   std::vector<int> std_nums_;
+  std::vector<Eigen::Matrix4d> poses_;
 
   /*Three main processing functions*/
 
@@ -322,7 +323,7 @@ public:
     corner_cloud_vec_.pop_back();
   }
 
-  void WriteIntoFile(std::string file_path, const std::vector<STDesc> &stds_vec);
+  void WriteIntoFile(std::string file_path, const std::vector<STDesc> &stds_vec, Eigen::Matrix3d rot, Eigen::Vector3d trans);
 
   void LoadFromFile(std::string file_path);
 

@@ -9,7 +9,7 @@
 		name="place_recognition_mid360" 
 		output="screen" 
 	/>
-  <param name="dir_path" type="string" value = "/media/jin/MyPassport/NTU_HELMET/0914/2023-09-14-21-08-14/frameClouds/"/>
+  <param name="dir_path" type="string" value = "/media/jin/MyPassport/NTU_HELMET/sn_1s/frameClouds/"/>
   <param name="bag_path" type="string" value = "/home/jin/ntu/std_ws/src/STD/data/park1.bag"/>
   <param name="pose_path" type="string" value = "/home/jin/ntu/std_ws/src/STD/data/park1_pose.txt"/>
 

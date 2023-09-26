@@ -271,7 +271,7 @@ int main(int argc, char **argv) {
     // }
     pcl::KdTreeFLANN<pcl::PointXYZ> tree;
     // tree.setInputCloud(pose_tree.makeShared());
-    FixSizeCloudDeque queue(80);
+    FixSizeCloudDeque queue(15);
 
     BOOST_FOREACH (int i, pcd_index) {//! view里的每个m。遍历，并非多线程！
         double laser_time = times_vec[i];
@@ -292,8 +292,8 @@ int main(int argc, char **argv) {
         queue.push_back(cloud);
 
         // check if keyframe
-        // if (cloudInd % config_setting.sub_frame_num_ == 0 && cloudInd != 0) {
-        if (cloudInd % config_setting.sub_frame_num_ == 0 && cloudInd >= 20) {
+        if (cloudInd % config_setting.sub_frame_num_ == 0 && cloudInd != 0) {
+        // if (cloudInd % config_setting.sub_frame_num_ == 0 && cloudInd >= 20) {
           for(const auto& cloud : queue.clouds){
             *temp_cloud += cloud;
           }
@@ -466,7 +466,12 @@ int main(int argc, char **argv) {
           if(!stds_vec.empty()){
             filesystem::create_directories(dir_path + "/../stds/");
             std::string std_file(dir_path + "/../stds/" + std::to_string(stds_vec.front().frame_id_));
-            std_manager->WriteIntoFile(std_file, stds_vec);
+            std_manager->WriteIntoFile(std_file, stds_vec, horizon_r, translation);
+            // std::ofstream pose_file(dir_path + "/../stds/pose_" + std::to_string(stds_vec.front().frame_id_));
+            // pose_file << horizon_r(0, 0) << " " << horizon_r(0, 1) << " " << horizon_r(0, 2) << " " << translation(0) << " " << 
+            //               horizon_r(1, 0) << " " << horizon_r(1, 1) << " " << horizon_r(1, 2) << " " << translation(1) << " " <<
+            //               horizon_r(2, 0) << " " << horizon_r(2, 1) << " " << horizon_r(2, 2) << " " << translation(2);
+            // pose_file.close();
           }
           
           //debug

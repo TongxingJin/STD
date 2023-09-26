@@ -470,8 +470,11 @@ void STDescManager::AddSTDescs(const std::vector<STDesc> &stds_vec) {
   return;
 }
 
-void STDescManager::WriteIntoFile(std::string file_path, const std::vector<STDesc> &stds_vec){
+void STDescManager::WriteIntoFile(std::string file_path, const std::vector<STDesc> &stds_vec, Eigen::Matrix3d rot, Eigen::Vector3d trans){
   std::ofstream of(file_path + ".txt", std::ios::out | std::ios::binary);
+  of << rot(0, 0) << " " << rot(0, 1) << " " << rot(0, 2) << " " << trans(0) << " " << 
+        rot(1, 0) << " " << rot(1, 1) << " " << rot(1, 2) << " " << trans(1) << " " <<
+        rot(2, 0) << " " << rot(2, 1) << " " << rot(2, 2) << " " << trans(2) << "\n";
   for (const STDesc& single_std : stds_vec) {
     of << single_std.side_length_(0) << " " << single_std.side_length_(1) << " " << single_std.side_length_(2) << " " <<
           single_std.angle_(0) << " " << single_std.angle_(1) << " " << single_std.angle_(2) << " " <<
@@ -491,6 +494,14 @@ void STDescManager::LoadFromFile(std::string file_path){//! 确保该函数只�
   std::string line;
   int id = 0;
   int count = 0;
+  getline(file, line);
+  std::vector<std::string> segments;
+  segments = split_line(line, " ");
+  Eigen::Matrix4d current_pose;
+  current_pose << std::stod(segments[0]), std::stod(segments[1]), std::stod(segments[2]), std::stod(segments[3]),
+                  std::stod(segments[4]), std::stod(segments[5]), std::stod(segments[6]), std::stod(segments[7]), 
+                  std::stod(segments[8]), std::stod(segments[9]), std::stod(segments[10]), std::stod(segments[11]),
+                  0.0, 0.0, 0.0, 1.0; 
   while(getline(file, line)){
     std::vector<std::string> segments;
     segments = split_line(line, " ");
@@ -524,6 +535,7 @@ void STDescManager::LoadFromFile(std::string file_path){//! 确保该函数只�
     count++;
   }
   std_nums_[id] = count;//! 记录该帧std的数目
+  poses_[id] = current_pose;
 
   pcl::PointCloud<pcl::PointXYZINormal>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZINormal>);
   pcl::io::loadPCDFile(file_path + ".pcd", *cloud);

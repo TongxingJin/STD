@@ -401,9 +401,9 @@ void STDescManager::SearchLoop(
   if(candidate_matcher_vec.size() < 5){
     show_num = candidate_matcher_vec.size();
   }
-  for (size_t i = 0; i < show_num; i++) {
-    LOG(INFO) << candidate_matcher_vec[i].match_id_.first << ", " << candidate_matcher_vec[i].match_id_.second;
-  }
+  // for (size_t i = 0; i < show_num; i++) {
+  //   LOG(INFO) << candidate_matcher_vec[i].match_id_.first << ", " << candidate_matcher_vec[i].match_id_.second;
+  // }
 
   auto t2 = std::chrono::high_resolution_clock::now();
   // step2, select best candidates from rough candidates
@@ -501,7 +501,7 @@ void STDescManager::LoadFromFile(std::string file_path){//! 确保该函数只�
   current_pose << std::stod(segments[0]), std::stod(segments[1]), std::stod(segments[2]), std::stod(segments[3]),
                   std::stod(segments[4]), std::stod(segments[5]), std::stod(segments[6]), std::stod(segments[7]), 
                   std::stod(segments[8]), std::stod(segments[9]), std::stod(segments[10]), std::stod(segments[11]),
-                  0.0, 0.0, 0.0, 1.0; 
+                  0.0, 0.0, 0.0, 1.0;
   while(getline(file, line)){
     std::vector<std::string> segments;
     segments = split_line(line, " ");
@@ -1404,7 +1404,7 @@ void STDescManager::candidate_verify(
     std::vector<std::pair<STDesc, STDesc>> &sucess_match_vec) {
   sucess_match_vec.clear();
   // LOG(INFO) << "candidate_matcher.match_list_ size: " << candidate_matcher.match_list_.size();
-  int skip_len = (int)(candidate_matcher.match_list_.size() / 500) + 1;//! 想取50个样本
+  int skip_len = (int)(candidate_matcher.match_list_.size() / 100) + 1;//! 想取50个样本
   int use_size = candidate_matcher.match_list_.size() / skip_len;
   double dis_threshold = 3.0;
   std::vector<size_t> index(use_size);

@@ -1,0 +1,20 @@
+<launch>
+<!-- Launch file for Livox AVIA LiDAR -->
+
+  <arg name="rviz" default="true" />
+  <rosparam command="load" file="$(find std_detector)/config/config_online_reloc.yaml" />
+  <node 
+		pkg="std_detector" 
+		type="online_reloc" 
+		name="online_reloc" 
+		output="screen" 
+	/>
+  <param name="dir_path" type="string" value = "/media/jin/MyPassport/NTU_HELMET/sn_1s/frameClouds/"/>
+  <param name="bag_path" type="string" value = "/home/jin/ntu/std_ws/src/STD/data/park1.bag"/>
+  <param name="pose_path" type="string" value = "/home/jin/ntu/std_ws/src/STD/data/park1_pose.txt"/>
+
+  <group if="$(arg rviz)">
+    <node launch-prefix="nice" pkg="rviz" type="rviz" name="reloc_rviz" args="-d $(find std_detector)/rviz_cfg/demo_online_reloc.rviz" />
+  </group>
+
+</launch>

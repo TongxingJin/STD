@@ -94,6 +94,14 @@ target_link_libraries(relocalization
         ${CERES_LIBRARIES}
         ${Boost_LIBRARIES})
 
+add_executable(online_reloc demo/online_reloc.cpp src/STDesc.cpp )
+target_link_libraries(online_reloc 
+        ${catkin_LIBRARIES} 
+        ${PCL_LIBRARIES} 
+        ${OpenCV_LIBS} 
+        ${CERES_LIBRARIES}
+        ${Boost_LIBRARIES})
+
 add_executable(pgo_demo demo/pgo_demo.cpp src/STDesc.cpp )
 target_link_libraries(pgo_demo 
         ${catkin_LIBRARIES} 

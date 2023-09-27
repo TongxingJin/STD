@@ -147,7 +147,7 @@ void load_custom_pose_with_time(const std::string &pose_dir,
   //   LOG(INFO) << "Index: " << index + 1 << "/" << tag_vec.size();
   // }
   // LOG(INFO) << "Map size: " << map.size();
-  // pcl::io::savePCDFileBinaryCompressed(pose_dir + "/map.pcd", map);
+  // pcl::io::savePCDFileBinaryCompressed(pose_dir + "/cropped_map.pcd", map);
   // // pcl::io::savePCDFileBinaryCompressed(pose_dir + "/track.pcd", track);
   // // LOG(FATAL) << "Done";
   // // for(int index = 1; index < tag_vec.size(); ++index){

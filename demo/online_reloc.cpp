@@ -201,8 +201,7 @@ pcl::PointCloud<pcl::PointXYZI>::Ptr cropped_map(new pcl::PointCloud<pcl::PointX
 sensor_msgs::PointCloud2 map_msg;
 pcl::PointCloud<pcl::PointXYZI>::Ptr current_cloud(new pcl::PointCloud<pcl::PointXYZI>());
 double current_time;// todo update current time
-ros::Publisher pubAlignedCloud;
-ros::Publisher pubGlobalMap;
+ros::Publisher pubAlignedCloud, pubGlobalMap, pubHorizonOdo, pubRealOdo;
 pcl::IterativeClosestPoint<pcl::PointXYZI, pcl::PointXYZI> icp;
 double fitness_score = 0.0;
 
@@ -226,6 +225,23 @@ void PointCloudRelocCallback(const sensor_msgs::PointCloud2::ConstPtr &msg){
     LOG(INFO) << "Callback";
     // ParseCloud(msg, current_cloud);
     pcl::fromROSMsg(*msg, *current_cloud);
+    Eigen::Matrix3f rot_offset;
+    {
+      for(int i = 0; i < 3; ++i){
+        const auto& p = current_cloud->points.back();
+        rot_offset(2 - i, 0) = p.x;
+        rot_offset(2 - i, 1) = p.y;
+        rot_offset(2 - i, 2) = p.z;
+        current_cloud->points.pop_back();
+        current_cloud->width = current_cloud->width - 1;
+      }
+    }
+    LOG(INFO) << "Submap size: " << current_cloud->size();
+    pcl::VoxelGrid<pcl::PointXYZI> downSizeFilter;
+    downSizeFilter.setLeafSize(0.08, 0.08, 0.08);
+    downSizeFilter.setInputCloud(current_cloud);
+    downSizeFilter.filter(*current_cloud);
+    LOG(INFO) << "Submap size: " << current_cloud->size();
 
     // std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> transformed_clouds;
     std::vector<double> scores;
@@ -284,7 +300,7 @@ void PointCloudRelocCallback(const sensor_msgs::PointCloud2::ConstPtr &msg){
 
     static int count = 0;
     if(count <= 5){
-      map_msg.header.stamp = ros::Time::now();
+      map_msg.header.stamp = msg->header.stamp;
       map_msg.header.frame_id = "camera_init";
       pubGlobalMap.publish(map_msg);
     }
@@ -305,12 +321,44 @@ void PointCloudRelocCallback(const sensor_msgs::PointCloud2::ConstPtr &msg){
         double score = icp.getFitnessScore(1);
         LOG(INFO) << "ICP score: " << score;
         if(score < fitness_score){
-          Eigen::Matrix4f final_trans = icp.getFinalTransformation();//todo
           sensor_msgs::PointCloud2 aligned_cloud_msg;
           pcl::toROSMsg(*transformed_cloud, aligned_cloud_msg);
           aligned_cloud_msg.header.stamp = msg->header.stamp;
           aligned_cloud_msg.header.frame_id = "camera_init";
-          pubAlignedCloud.publish(aligned_cloud_msg); 
+          pubAlignedCloud.publish(aligned_cloud_msg);
+
+          Eigen::Matrix4f final_trans = icp.getFinalTransformation();//todo
+          Eigen::Matrix4f delta_trans;
+          delta_trans << rot_offset, Eigen::Vector3f::Zero(),
+                          0.0, 0.0, 0.0, 1.0;
+          Eigen::Matrix4f real_trans = final_trans * delta_trans;
+          nav_msgs::Odometry horizon_odo;
+          horizon_odo.header.frame_id = "camera_init";
+          horizon_odo.child_frame_id = "horizon_body";
+          horizon_odo.header.stamp = msg->header.stamp;// ros::Time().fromSec(lidar_end_time);
+          horizon_odo.pose.pose.position.x = final_trans(0, 3);
+          horizon_odo.pose.pose.position.y = final_trans(1, 3);
+          horizon_odo.pose.pose.position.z = final_trans(2, 3);
+          Eigen::Quaternionf q(Eigen::Matrix3f(final_trans.topLeftCorner(3, 3)));
+          horizon_odo.pose.pose.orientation.x = q.x();
+          horizon_odo.pose.pose.orientation.y = q.y();
+          horizon_odo.pose.pose.orientation.z = q.z();
+          horizon_odo.pose.pose.orientation.w = q.w();
+          pubHorizonOdo.publish(horizon_odo);
+
+          nav_msgs::Odometry real_odo;
+          real_odo.header.frame_id = "camera_init";
+          real_odo.child_frame_id = "real_body";
+          real_odo.header.stamp = msg->header.stamp;// ros::Time().fromSec(lidar_end_time);
+          real_odo.pose.pose.position.x = real_trans(0, 3);
+          real_odo.pose.pose.position.y = real_trans(1, 3);
+          real_odo.pose.pose.position.z = real_trans(2, 3);
+          Eigen::Quaternionf qq(Eigen::Matrix3f(real_trans.topLeftCorner(3, 3)));
+          real_odo.pose.pose.orientation.x = qq.x();
+          real_odo.pose.pose.orientation.y = qq.y();
+          real_odo.pose.pose.orientation.z = qq.z();
+          real_odo.pose.pose.orientation.w = qq.w();
+          pubRealOdo.publish(real_odo);
         }
       }
 
@@ -328,6 +376,9 @@ int main(int argc, char **argv) {
   ros::NodeHandle nh;
   pubAlignedCloud = nh.advertise<sensor_msgs::PointCloud2>("/aligned_current", 100);
   pubGlobalMap = nh.advertise<sensor_msgs::PointCloud2>("/global_map", 100);
+  pubHorizonOdo = nh.advertise<nav_msgs::Odometry>("/horizon_odo", 1);
+  pubRealOdo = nh.advertise<nav_msgs::Odometry>("/real_odo", 1);
+
   std::string dir_path = "";
   std::string bag_path = "";
   std::string pose_path = "";

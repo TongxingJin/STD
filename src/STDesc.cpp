@@ -1680,7 +1680,7 @@ void OctoTree::init_plane() {
   Eigen::Vector3d evalsReal;
   evalsReal = evals.real();//todo jin:
   Eigen::Matrix3d::Index evalsMin, evalsMax;
-  evalsReal.rowwise().sum().minCoeff(&evalsMin);//todo jin:这个不是默认排序好了么？
+  evalsReal.rowwise().sum().minCoeff(&evalsMin);//todo jin:这个不是默认排序好了么？//! 还真不是
   evalsReal.rowwise().sum().maxCoeff(&evalsMax);
   int evalsMid = 3 - evalsMin - evalsMax;
   // if (evalsReal(evalsMin) < config_setting_.plane_detection_thre_) {//! jin:最小的足够小

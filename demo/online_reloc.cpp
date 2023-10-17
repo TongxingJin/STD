@@ -191,8 +191,6 @@ Eigen::Matrix3d GetHorizon(const Eigen::Matrix3d& r) {
   }
 
   return (Eigen::AngleAxisd((ypr.x()), Eigen::Vector3d::UnitZ())).toRotationMatrix();
-
-  // return ypr;
 }
 
 STDescManager *std_manager;

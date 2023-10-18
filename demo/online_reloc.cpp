@@ -202,7 +202,8 @@ double current_time;// todo update current time
 ros::Publisher pubAlignedCloud, pubGlobalMap, pubHorizonOdo, pubRealOdo;
 pcl::IterativeClosestPoint<pcl::PointXYZI, pcl::PointXYZI> icp;
 double fitness_score = 0.0;
-
+ros::Publisher pubSTD;
+ros::Publisher pubCandidateScan;
 // void ParseCloud(const livox_ros_driver::CustomMsg::ConstPtr &msg, pcl::PointCloud<pcl::PointXYZI>::Ptr cloud){
 //   current_cloud->clear();
 //   int points_size = msg->point_num;
@@ -217,6 +218,149 @@ double fitness_score = 0.0;
 //   }
 //   return;
 // }
+
+void publish_std_pairs2(
+    const std::vector<std::pair<STDesc, STDesc>> &match_std_pairs,
+    const ros::Publisher &std_publisher) {
+  visualization_msgs::MarkerArray ma_line;
+  visualization_msgs::Marker m_line;
+  m_line.type = visualization_msgs::Marker::LINE_LIST;
+  m_line.action = visualization_msgs::Marker::ADD;
+  m_line.ns = "lines";
+  // Don't forget to set the alpha!
+  m_line.scale.x = 0.25;
+  m_line.pose.orientation.w = 1.0;
+  m_line.header.frame_id = "camera_init";
+  m_line.id = 0;
+  int max_pub_cnt = 1;
+  for (auto var : match_std_pairs) {
+    if (max_pub_cnt > 100) {
+      break;
+    }
+    max_pub_cnt++;
+    m_line.color.a = 0.8;
+    m_line.points.clear();
+    m_line.color.r = 138.0 / 255;
+    m_line.color.g = 226.0 / 255;
+    m_line.color.b = 52.0 / 255;
+    geometry_msgs::Point p;
+    p.x = var.second.vertex_A_[0];
+    p.y = var.second.vertex_A_[1];
+    p.z = var.second.vertex_A_[2];
+    Eigen::Vector3d t_p;
+    t_p << p.x, p.y, p.z;
+    p.x = t_p[0];//todo 交换的意义是什么？只保留整数部分？
+    p.y = t_p[1];
+    p.z = t_p[2];
+    m_line.points.push_back(p);//! second的A
+    p.x = var.second.vertex_B_[0];
+    p.y = var.second.vertex_B_[1];
+    p.z = var.second.vertex_B_[2];
+    t_p << p.x, p.y, p.z;
+    p.x = t_p[0];
+    p.y = t_p[1];
+    p.z = t_p[2];
+    m_line.points.push_back(p);//! second的B
+    ma_line.markers.push_back(m_line);//! second的AB之间画线
+    m_line.id++;
+    m_line.points.clear();
+    p.x = var.second.vertex_C_[0];
+    p.y = var.second.vertex_C_[1];
+    p.z = var.second.vertex_C_[2];
+    t_p << p.x, p.y, p.z;
+    p.x = t_p[0];
+    p.y = t_p[1];
+    p.z = t_p[2];
+    m_line.points.push_back(p);
+    p.x = var.second.vertex_B_[0];
+    p.y = var.second.vertex_B_[1];
+    p.z = var.second.vertex_B_[2];
+    t_p << p.x, p.y, p.z;
+    p.x = t_p[0];
+    p.y = t_p[1];
+    p.z = t_p[2];
+    m_line.points.push_back(p);
+    ma_line.markers.push_back(m_line);//! second的CB之间画线
+    m_line.id++;
+    m_line.points.clear();
+    p.x = var.second.vertex_C_[0];
+    p.y = var.second.vertex_C_[1];
+    p.z = var.second.vertex_C_[2];
+    t_p << p.x, p.y, p.z;
+    p.x = t_p[0];
+    p.y = t_p[1];
+    p.z = t_p[2];
+    m_line.points.push_back(p);
+    p.x = var.second.vertex_A_[0];
+    p.y = var.second.vertex_A_[1];
+    p.z = var.second.vertex_A_[2];
+    t_p << p.x, p.y, p.z;
+    p.x = t_p[0];
+    p.y = t_p[1];
+    p.z = t_p[2];
+    m_line.points.push_back(p);
+    ma_line.markers.push_back(m_line);//! second的CA之间画线
+    m_line.id++;
+    m_line.points.clear();
+    // another
+    // m_line.points.clear();
+    // m_line.color.r = 1;
+    // m_line.color.g = 1;
+    // m_line.color.b = 1;//! 颜色修改成白色
+    // p.x = var.first.vertex_A_[0];
+    // p.y = var.first.vertex_A_[1];
+    // p.z = var.first.vertex_A_[2];
+    // m_line.points.push_back(p);
+    // p.x = var.first.vertex_B_[0];
+    // p.y = var.first.vertex_B_[1];
+    // p.z = var.first.vertex_B_[2];
+    // m_line.points.push_back(p);
+    // ma_line.markers.push_back(m_line);
+    // m_line.id++;
+    // m_line.points.clear();
+    // p.x = var.first.vertex_C_[0];
+    // p.y = var.first.vertex_C_[1];
+    // p.z = var.first.vertex_C_[2];
+    // m_line.points.push_back(p);
+    // p.x = var.first.vertex_B_[0];
+    // p.y = var.first.vertex_B_[1];
+    // p.z = var.first.vertex_B_[2];
+    // m_line.points.push_back(p);
+    // ma_line.markers.push_back(m_line);
+    // m_line.id++;
+    // m_line.points.clear();
+    // p.x = var.first.vertex_C_[0];
+    // p.y = var.first.vertex_C_[1];
+    // p.z = var.first.vertex_C_[2];
+    // m_line.points.push_back(p);
+    // p.x = var.first.vertex_A_[0];
+    // p.y = var.first.vertex_A_[1];
+    // p.z = var.first.vertex_A_[2];
+    // m_line.points.push_back(p);
+    // ma_line.markers.push_back(m_line);
+    // m_line.id++;
+    // m_line.points.clear();//! 至此，完成了一对描述子中的6条线
+  }
+  // for (int j = 0; j < 100 * 6; j++) {
+  //   m_line.color.a = 0.00;
+  //   ma_line.markers.push_back(m_line);
+  //   m_line.id++;
+  // }
+  int compensate_size = 600 - ma_line.markers.size();
+  while(compensate_size > 0){
+    geometry_msgs::Point p;
+    p.x = p.y = p.z = 0;
+    m_line.points.push_back(p);
+    m_line.points.push_back(p);
+    m_line.color.a = 0.0;
+    ma_line.markers.push_back(m_line);
+    m_line.id++;
+    compensate_size--;
+  }
+  std_publisher.publish(ma_line);
+  m_line.id = 0;
+  ma_line.markers.clear();
+}
 
 // void PointCloudRelocCallback(const livox_ros_driver::CustomMsg::ConstPtr &msg){
 void PointCloudRelocCallback(const sensor_msgs::PointCloud2::ConstPtr &msg){
@@ -246,6 +390,7 @@ void PointCloudRelocCallback(const sensor_msgs::PointCloud2::ConstPtr &msg){
     std::vector<int> candidate_ids;
     std::vector<int> rots;
     std::vector<Eigen::Matrix4d> delta_poses;
+    std::vector<std::vector<std::pair<STDesc, STDesc>>> loop_std_pairs;
     for(int rot = 0; rot < 180; rot += 60){
       pcl::PointCloud<pcl::PointXYZI>::Ptr rot_cloud(new pcl::PointCloud<pcl::PointXYZI>);
 
@@ -283,6 +428,17 @@ void PointCloudRelocCallback(const sensor_msgs::PointCloud2::ConstPtr &msg){
         scores.push_back(search_result.second);
         candidate_ids.push_back(search_result.first);
         rots.push_back(rot);
+        Eigen::Matrix4d shifted_pose = std_manager->poses_[search_result.first] * delta_pose;
+        for(std::pair<STDesc, STDesc>& p : loop_std_pair){
+          p.first.vertex_A_ = shifted_pose.topLeftCorner(3, 3) * p.first.vertex_A_ + shifted_pose.topRightCorner(3, 1);
+          p.first.vertex_B_ = shifted_pose.topLeftCorner(3, 3) * p.first.vertex_B_ + shifted_pose.topRightCorner(3, 1);
+          p.first.vertex_C_ = shifted_pose.topLeftCorner(3, 3) * p.first.vertex_C_ + shifted_pose.topRightCorner(3, 1);
+
+          p.second.vertex_A_ = std_manager->poses_[search_result.first].topLeftCorner(3, 3) * p.second.vertex_A_ + std_manager->poses_[search_result.first].topRightCorner(3, 1);
+          p.second.vertex_B_ = std_manager->poses_[search_result.first].topLeftCorner(3, 3) * p.second.vertex_B_ + std_manager->poses_[search_result.first].topRightCorner(3, 1);
+          p.second.vertex_C_ = std_manager->poses_[search_result.first].topLeftCorner(3, 3) * p.second.vertex_C_ + std_manager->poses_[search_result.first].topRightCorner(3, 1);
+        }
+        loop_std_pairs.push_back(loop_std_pair);
       }else{
         LOG(INFO) << "No loop is found!";
       }
@@ -357,6 +513,17 @@ void PointCloudRelocCallback(const sensor_msgs::PointCloud2::ConstPtr &msg){
           real_odo.pose.pose.orientation.z = qq.z();
           real_odo.pose.pose.orientation.w = qq.w();
           pubRealOdo.publish(real_odo);
+
+          publish_std_pairs2(loop_std_pairs[best_id], pubSTD);
+
+          pcl::PointCloud<pcl::PointXYZI> candidate_scan;
+          pcl::io::loadPCDFile("/media/jin/MyPassport/NTU_HELMET/sn_1s/stds/ori_clouds/" + std::to_string(best_frame_id) + ".pcd", candidate_scan);
+          pcl::transformPointCloud<pcl::PointXYZI>(candidate_scan, candidate_scan, std_manager->poses_[best_frame_id]);
+          sensor_msgs::PointCloud2 candi_msg;
+          pcl::toROSMsg(candidate_scan, candi_msg);
+          candi_msg.header.stamp = msg->header.stamp;
+          candi_msg.header.frame_id = "camera_init";
+          pubCandidateScan.publish(candi_msg);
         }
       }
 
@@ -376,6 +543,8 @@ int main(int argc, char **argv) {
   pubGlobalMap = nh.advertise<sensor_msgs::PointCloud2>("/global_map", 100);
   pubHorizonOdo = nh.advertise<nav_msgs::Odometry>("/horizon_odo", 1);
   pubRealOdo = nh.advertise<nav_msgs::Odometry>("/real_odo", 1);
+  pubSTD = nh.advertise<visualization_msgs::MarkerArray>("descriptor_line", 10);
+  pubCandidateScan = nh.advertise<sensor_msgs::PointCloud2>("/candidate_scan", 100);
 
   std::string dir_path = "";
   std::string bag_path = "";
